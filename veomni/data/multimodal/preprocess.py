@@ -41,6 +41,49 @@ def sharegpt4v_pretrain_preprocess(conversations, generation_ratio=0.0, **kwargs
         constructed_conversation = [["user", ("text", instruction)], ["assistant", ("image", None)]]
     return constructed_conversation
 
+def sharegpt4v_pretrain_preprocess_customer(conversations, generation_ratio=0.0, **kwargs):
+    """
+    row data: {"from": [role], "value": [content]}
+    transform data: [{"from": role, "value": content}, {"from": role, "value": content}, ...]
+    """
+    
+    if isinstance(conversations, dict) and "from" in conversations and "value" in conversations:
+        if len(conversations["from"]) == len(conversations["value"]):
+            conversations = [
+                {"from": f, "value": v} 
+                for f, v in zip(conversations["from"], conversations["value"])
+            ]
+        else:
+            raise ValueError("Length of 'from' and 'value' lists must be equal")
+    
+    constructed_conversation = []
+    
+    if conversations and conversations[0]["from"] != "human":
+        conversations = conversations[1:]
+    
+    if not conversations:
+        raise ValueError("Empty conversations after preprocessing")
+    assert conversations[0]["from"] == "human", "First message must be from human"
+
+    for message in conversations:
+        role = message["from"]
+        value = message["value"]
+        if role == "human":
+            value = value.replace("<image>", "")
+            constructed_conversation.append(["user", ("image", None), ("text", value)])
+        else:
+            if value is not None:
+                constructed_conversation.append(["assistant", ("text", value)])
+            else:
+                constructed_conversation.append(None)
+
+    generate_sample = random.random() < generation_ratio
+    if generate_sample:
+        caption = constructed_conversation[-1][1][1] if constructed_conversation[-1] else ""
+        instruction = f"Generate an image based on the following caption: {caption}"
+        constructed_conversation = [["user", ("text", instruction)], ["assistant", ("image", None)]]
+    
+    return constructed_conversation
 
 def sharegpt4v_sft_preprocess(conversations, **kwargs):
     role_mapping = {"human": "user", "gpt": "assistant"}
@@ -297,6 +340,7 @@ def mmsci_preprocess(conversations, **kwargs):
 
 DATASETS = {
     "sharegpt4v_pretrain": sharegpt4v_pretrain_preprocess,
+    "sharegpt4v_pretrain_customer": sharegpt4v_pretrain_preprocess_customer,
     "sharegpt4v_captioner": sharegpt4v_pretrain_preprocess,
     "sharegpt4v_sft": sharegpt4v_sft_preprocess,
     "doom": doom_preprocess,

@@ -70,9 +70,7 @@ def process_sample(
     image_grid_thw = None
     if "images" in sample:
         images = []
-        for image in sample["images"]:
-            images.append(Image.open(BytesIO(image)).convert("RGB"))
-
+        images.append(Image.open(BytesIO(sample["images"])).convert("RGB"))
         image_inputs = processor.image_processor(images=images, return_tensors="pt")
         image_grid_thw = image_inputs["image_grid_thw"]
         merge_length = processor.image_processor.merge_size**2
@@ -119,11 +117,17 @@ class MyTrainingArguments(TrainingArguments):
         metadata={"help": "Maximum learning rate for vit parameters."},
     )
 
+@dataclass
+class MyDataArguments(DataArguments):
+    source_name: str = field(
+        default=None,
+        metadata={"help": "Source name of dataset."},
+    )
 
 @dataclass
 class Arguments:
     model: "ModelArguments" = field(default_factory=ModelArguments)
-    data: "DataArguments" = field(default_factory=DataArguments)
+    data: "MyDataArguments" = field(default_factory=MyDataArguments)
     train: "MyTrainingArguments" = field(default_factory=MyTrainingArguments)
 
 
@@ -174,6 +178,7 @@ def main():
         processor=processor,
         chat_template=chat_template,
         position_id_func=position_id_func,
+        source_name=args.data.source_name,
     )
 
     if args.train.rmpad:
@@ -292,9 +297,6 @@ def main():
         global_batch_size=args.train.global_batch_size,
         rmpad=args.train.rmpad,
         rmpad_with_pos_ids=args.train.rmpad_with_pos_ids,
-        enable_multisource=args.data.enable_multisource,
-        dataloader=train_dataloader,
-        data_path=args.data.train_path,
         empty_cache_steps=args.train.empty_cache_steps,
     )
 
@@ -319,6 +321,7 @@ def main():
     model_fwd_context, model_bwd_context = build_activation_offloading_context(
         args.train.enable_activation_offload, args.train.enable_gradient_checkpointing, args.train.activation_gpu_limit
     )
+    model.to(torch.bfloat16)
     model.train()
     logger.info_rank0("Start training")
     for epoch in range(start_epoch, args.train.num_train_epochs):
@@ -349,9 +352,6 @@ def main():
             start_time = time.time()
             for micro_batch in micro_batches:
                 environ_meter.add(micro_batch)
-                if args.data.enable_multisource:
-                    micro_batch.pop("ds_idx", None)
-                    micro_batch.pop("cur_token_num", None)
 
                 micro_batch = {
                     k: v.cuda(non_blocking=True) if isinstance(v, torch.Tensor) else v for k, v in micro_batch.items()
