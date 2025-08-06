@@ -154,3 +154,4 @@ processor_config.json
 
 # nsys file
 nsysoutput/
+.vscode

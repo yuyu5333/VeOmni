@@ -14,12 +14,19 @@
 
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-from ...ops.attention import flash_attention_forward
+from ...ops.attention import flash_attention_forward, flash_attention_3_forward
 
 
 ALL_ATTENTION_FUNCTIONS.register("flash_attention_2", flash_attention_forward)
+<<<<<<< HEAD
 
 from . import deepseek_v3, flux, llama, qwen2, qwen2_vl, qwen3, qwen3_moe, wan
+=======
+ALL_ATTENTION_FUNCTIONS.register("flash_attention_3", flash_attention_3_forward)
+>>>>>>> cd845b0 ([model]: add wan2.2)
 
 
-__all__ = ["qwen2_vl", "deepseek_v3", "qwen2", "llama", "qwen3", "qwen3_moe", "wan", "flux"]
+from . import deepseek_v3, llama, qwen2, qwen2_vl, qwen3, qwen3_moe, wan, flux, wan2_2
+
+
+__all__ = ["qwen2_vl", "deepseek_v3", "qwen2", "llama", "qwen3", "qwen3_moe", "wan", "flux", "wan2_2"]
