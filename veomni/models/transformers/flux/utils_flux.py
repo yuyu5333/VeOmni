@@ -923,6 +923,7 @@ class SDVAEEncoderStateDictConverter:
         }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         name_list = sorted(state_dict)
 =======
         name_list = sorted([name for name in state_dict])
@@ -930,6 +931,9 @@ class SDVAEEncoderStateDictConverter:
 =======
         name_list = sorted(list(state_dict))
 >>>>>>> 48040b0 ([model] fix: format flux code)
+=======
+        name_list = sorted([name for name in state_dict])
+>>>>>>> 3bf0003 ([model] fix: format flux code)
         rename_dict = {}
         block_id = {"ResnetBlock": -1, "DownSampler": -1, "UpSampler": -1}
         last_block_type_with_id = {"ResnetBlock": "", "DownSampler": "", "UpSampler": ""}

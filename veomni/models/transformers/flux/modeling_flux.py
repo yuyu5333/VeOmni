@@ -598,9 +598,7 @@ class FluxModel(PreTrainedModel):
         W = width // 2
         C = hidden_states.shape[-1] // (2 * 2)  # 计算推断的通道数
 
-        output = rearrange(hidden_states, "B (H W) (C P Q) -> B C (H P) (W Q)", 
-                        P=2, Q=2, H=H, W=W, C=C)
-
+        output = rearrange(hidden_states, "B (H W) (C P Q) -> B C (H P) (W Q)", P=2, Q=2, H=H, W=W, C=C)
         return output
 
 >>>>>>> 858efdb ([model] feat: add flux)
