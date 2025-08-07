@@ -1,7 +1,7 @@
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Literal
 
 import torch
 import torch.distributed as dist
@@ -104,7 +104,10 @@ class MyModelArguments(ModelArguments):
         default=None,
         metadata={"help": "Pretrained LoRA path. Required if the training is resumed."},
     )
+<<<<<<< HEAD
 
+=======
+>>>>>>> dac3796 ([model] fix: move lora to flux_train)
 
 @dataclass
 class MyTrainingArguments(TrainingArguments):
@@ -124,7 +127,10 @@ class MyTrainingArguments(TrainingArguments):
         default="full",
         metadata={"help": "Model structure to train. LoRA training or full training."},
     )
+<<<<<<< HEAD
 
+=======
+>>>>>>> dac3796 ([model] fix: move lora to flux_train)
 
 @dataclass
 class Arguments:
