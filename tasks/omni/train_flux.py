@@ -1,7 +1,7 @@
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List
 
 import torch
 import torch.distributed as dist
@@ -16,7 +16,7 @@ from veomni.data.diffusion.dataset import build_text_image_dataset
 from veomni.distributed.offloading import build_activation_offloading_context
 from veomni.distributed.parallel_state import get_parallel_state, init_parallel_state
 from veomni.distributed.torch_parallelize import build_parallelize_model
-from veomni.models import build_foundation_model, save_model_assets
+from veomni.models import save_model_assets
 from veomni.models.transformers.flux.encode_flux import (
     encode_prompt,
     from_diffusers,
@@ -159,7 +159,7 @@ def main():
             args.data.train_size,
             len(train_dataset) // args.train.data_parallel_size,
         )
-        
+
         train_dataloader = build_dit_dataloader(
             dataset=train_dataset,
             micro_batch_size=args.train.micro_batch_size,
@@ -246,7 +246,7 @@ def main():
         use_orig_params=_use_orig_params,
         ops_to_save=ops_to_save,
     )
-    
+
     optimizer = build_optimizer(
         model,
         lr=args.train.lr,
@@ -303,7 +303,7 @@ def main():
         global_batch_size=args.train.global_batch_size,
         empty_cache_steps=args.train.empty_cache_steps,
     )
-    
+
     if args.train.load_checkpoint_path:
         state = {"model": model, "optimizer": optimizer, "extra_state": {}}  # cannot be None
         Checkpointer.load(args.train.load_checkpoint_path, state)
@@ -333,9 +333,9 @@ def main():
     logger.info(
         f"rank{args.train.local_rank} Start training, train_steps: {args.train.train_steps}, epochs: {args.train.num_train_epochs}"
     )
-    
+
     flow_scheduler.set_timesteps(1000, training=True)
-    
+
     for epoch in range(start_epoch, args.train.num_train_epochs):
         if hasattr(train_dataloader, "set_epoch"):
             train_dataloader.set_epoch(epoch)
@@ -371,7 +371,7 @@ def main():
                 else:
                     vae_encoder.to(model.device)
                     latents = vae_encoder(image.to(dtype=torch.bfloat16, device=model.device))
-                    
+
                 environ_meter.add(latents, model_type="flux")
                 noise = torch.randn_like(latents)
                 timestep_id = torch.randint(0, flow_scheduler.num_train_timesteps, (1,))
@@ -391,10 +391,10 @@ def main():
                     loss = (loss.view(latents.size(0), -1).mean(dim=1) * weight).mean() / len(micro_batches)
                 with model_bwd_context:
                     loss.backward()
-                    
+
                 total_loss += loss.item()
                 del batch
-                
+
             if args.train.data_parallel_mode == "fsdp1":
                 grad_norm = model.clip_grad_norm_(args.train.max_grad_norm).item()
             else:
@@ -405,7 +405,7 @@ def main():
             optimizer.zero_grad()
             if hasattr(grad_norm, "full_tensor"):
                 grad_norm = grad_norm.full_tensor().item()
-                
+
             total_loss, grad_norm = all_reduce((total_loss, grad_norm), group=get_parallel_state().fsdp_group)
             epoch_loss += total_loss
             torch.cuda.synchronize()
@@ -417,7 +417,7 @@ def main():
                 f"loss: {total_loss:.4f}, grad_norm: {grad_norm:.2f}, lr: {lr:.2e}, step_time: {delta_time:.2f}s"
             )
             data_loader_tqdm.update()
-            
+
             if args.train.global_rank == 0:
                 if args.train.use_wandb:
                     train_metrics.update(
@@ -446,7 +446,7 @@ def main():
                 Checkpointer.save(args.train.save_checkpoint_path, state, global_steps=global_step)
                 if args.train.global_rank == 0:
                     save_hf_weights(args, save_checkpoint_path, model_assets)
-            
+
         data_loader_tqdm.close()
         epoch_time = time.time() - epoch_start_time
         start_step = 0
@@ -475,7 +475,7 @@ def main():
             Checkpointer.save(args.train.save_checkpoint_path, state, global_steps=global_step)
             if args.train.global_rank == 0:
                 save_hf_weights(args, save_checkpoint_path, model_assets)
-                
+
     torch.cuda.synchronize()
     # release memory
     del optimizer, lr_scheduler
@@ -483,7 +483,7 @@ def main():
 
     dist.barrier()
     dist.destroy_process_group()
-                
+
 def save_hf_weights(args, save_checkpoint_path, model_assets):
     hf_weights_path = os.path.join(save_checkpoint_path, "hf_ckpt")
     model_state_dict = ckpt_to_state_dict(

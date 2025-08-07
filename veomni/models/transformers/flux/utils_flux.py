@@ -647,7 +647,7 @@ class SDVAEEncoderStateDictConverter:
             "encoder.conv_norm_out": "conv_norm_out",
             "encoder.conv_out": "conv_out",
         }
-        name_list = sorted([name for name in state_dict])
+        name_list = sorted(list(state_dict))
         rename_dict = {}
         block_id = {"ResnetBlock": -1, "DownSampler": -1, "UpSampler": -1}
         last_block_type_with_id = {"ResnetBlock": "", "DownSampler": "", "UpSampler": ""}
@@ -916,7 +916,7 @@ class FluxVAEEncoderStateDictConverter(SDVAEEncoderStateDictConverter):
                     param = param.squeeze()
                 state_dict_[rename_dict[name]] = param
         return state_dict_
-    
+
 class FluxDiTStateDictConverter:
     def __init__(self):
         pass

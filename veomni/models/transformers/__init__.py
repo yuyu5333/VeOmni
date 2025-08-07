@@ -19,7 +19,7 @@ from ...ops.attention import flash_attention_forward
 
 ALL_ATTENTION_FUNCTIONS.register("flash_attention_2", flash_attention_forward)
 
-from . import deepseek_v3, llama, qwen2, qwen2_vl, qwen3, qwen3_moe, wan, flux
+from . import deepseek_v3, flux, llama, qwen2, qwen2_vl, qwen3, qwen3_moe, wan
 
 
 __all__ = ["qwen2_vl", "deepseek_v3", "qwen2", "llama", "qwen3", "qwen3_moe", "wan", "flux"]

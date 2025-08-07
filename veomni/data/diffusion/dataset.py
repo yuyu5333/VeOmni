@@ -16,16 +16,14 @@
 import os
 
 import pandas as pd
-import torch, torchvision
-
+import torch
+import torchvision
 from PIL import Image
 from torchvision import transforms
 
-from ...utils import logging
-
+from veomni.utils import logging
 
 logger = logging.get_logger(__name__)
-
 
 class TensorDataset(torch.utils.data.Dataset):
     def __init__(self, base_path, metadata_path, datasets_repeat=1):
@@ -78,10 +76,9 @@ class Text2ImageDataset(torch.utils.data.Dataset):
         image = torchvision.transforms.functional.resize(image,shape,interpolation=transforms.InterpolationMode.BILINEAR)
         image = self.image_processor(image)
         return [{"text": text, "image": image}]
-    
+
     def __len__(self):
         return len(self.path) * self.datasets_repeat
-
 
 def build_tensor_dataset(base_path, metadata_path, datasets_repeat=1):
     return TensorDataset(base_path, metadata_path, datasets_repeat)

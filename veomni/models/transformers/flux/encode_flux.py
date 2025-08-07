@@ -18,7 +18,6 @@ import os
 import torch
 from safetensors import safe_open
 
-
 refiners = []
 
 def encode_prompt_using_clip(prompt, text_encoder, tokenizer, max_length, device):
@@ -125,8 +124,10 @@ def load_state_dict_(file_path, torch_dtype=None, device="cpu"):
 
 def load_model(file_path, device=None, torch_dtype=None):
     print(f"Loading models from: {file_path}")
-    if device is None: device = device
-    if torch_dtype is None: torch_dtype = torch_dtype
+    if device is None:
+        device = device
+    if torch_dtype is None:
+        torch_dtype = torch_dtype
     if isinstance(file_path, list):
         state_dict = {}
         for path in file_path:
