@@ -19,9 +19,9 @@ from ....distributed.parallel_plan import ParallelPlan
 
 def get_paralle_plan():
     ep_plan = {
-        "model.layers.*.mlp.experts.fc1_1": Shard(0),
-        "model.layers.*.mlp.experts.fc1_2": Shard(0),
-        "model.layers.*.mlp.experts.fc2": Shard(0),
+        "model.layers.*.mlp.experts.gate_proj": Shard(0),
+        "model.layers.*.mlp.experts.up_proj": Shard(0),
+        "model.layers.*.mlp.experts.down_proj": Shard(0),
     }
     parallel_plan = ParallelPlan(
         ep_plan=ep_plan,

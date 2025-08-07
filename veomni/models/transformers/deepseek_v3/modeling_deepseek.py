@@ -50,13 +50,9 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
-from ....distributed.parallel_state import get_parallel_state
-from ....utils.import_utils import is_fused_moe_available
+from ....ops import fused_moe_forward
 from .configuration_deepseek import DeepseekV3Config
 
-
-if is_fused_moe_available():
-    from ....distributed.moe import EPGroupGemm, fused_moe_forward, preprocess, token_pre_all2all, tokens_post_all2all
 
 if is_flash_attn_2_available():
     from transformers.modeling_flash_attention_utils import _flash_attention_forward
@@ -384,44 +380,48 @@ class MoEGate(nn.Module):
         return topk_idx, topk_weight
 
 
-class Experts(nn.Module):
+class DeepSeekV3Experts(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.n_routed_experts = config.n_routed_experts
         ffn_dim = int(config.moe_intermediate_size)
-        self.fc1_1 = torch.nn.Parameter(
+        self.gate_proj = torch.nn.Parameter(
             torch.empty(config.n_routed_experts, ffn_dim, config.hidden_size),
             requires_grad=True,
         )
-        self.fc1_2 = torch.nn.Parameter(
+        self.up_proj = torch.nn.Parameter(
             torch.empty(config.n_routed_experts, ffn_dim, config.hidden_size),
             requires_grad=True,
         )
-        self.fc2 = torch.nn.Parameter(
+        self.down_proj = torch.nn.Parameter(
             torch.empty(config.n_routed_experts, config.hidden_size, ffn_dim),
             requires_grad=True,
         )
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states, index=None, cumsum=None):
-        if cumsum is not None:
-            assert self.training and get_parallel_state().ep_enabled
-            final_permute_tokens = EPGroupGemm.apply(
-                hidden_states,
-                cumsum,
-                self.fc1_1,
-                self.fc1_2,
-                self.fc2,
-            )
-            return final_permute_tokens
-        elif index is not None:
-            fc1_1_out = torch.matmul(hidden_states, self.fc1_1[index].transpose(0, 1))
-            fc1_2_out = torch.matmul(hidden_states, self.fc1_2[index].transpose(0, 1))
-            fc1_out = self.act_fn(fc1_1_out) * fc1_2_out
-            fc2_out = torch.matmul(fc1_out, self.fc2[index].transpose(0, 1))
+    def forward(self, hidden_states, expert_idx=None, routing_weights=None, selected_experts=None):
+        if expert_idx is not None:
+            gate_proj_out = torch.matmul(hidden_states, self.gate_proj[expert_idx].transpose(0, 1))
+            up_proj_out = torch.matmul(hidden_states, self.up_proj[expert_idx].transpose(0, 1))
 
-            return fc2_out
+            out = self.act_fn(gate_proj_out) * up_proj_out
+            out = torch.matmul(out, self.down_proj[expert_idx].transpose(0, 1))
         else:
-            raise NotImplementedError("Only support index and cumsum")
+            assert routing_weights is not None and selected_experts is not None, (
+                "routing_weights and selected_experts must be provided when expert_idx is None"
+            )
+
+            out = fused_moe_forward(
+                module=self,
+                num_experts=self.n_routed_experts,
+                routing_weights=routing_weights,
+                selected_experts=selected_experts,
+                hidden_states=hidden_states,
+                fc1_1_weight=self.gate_proj,
+                fc1_2_weight=self.up_proj,
+                fc2_weight=self.down_proj,
+            )
+        return out
 
 
 class DeepseekV3MoE(nn.Module):
@@ -434,7 +434,7 @@ class DeepseekV3MoE(nn.Module):
         self.config = config
         self.num_experts_per_tok = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
-        self.experts = Experts(config)
+        self.experts = DeepSeekV3Experts(config)
         self.gate = MoEGate(config)
         if config.n_shared_experts is not None:
             intermediate_size = config.moe_intermediate_size * config.n_shared_experts
@@ -446,71 +446,15 @@ class DeepseekV3MoE(nn.Module):
         topk_idx, topk_weight = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
-        if self.training and get_parallel_state().ep_enabled:
-            selected_experts = topk_idx
-            expert_mask = torch.nn.functional.one_hot(topk_idx, num_classes=self.n_routed_experts).permute(2, 1, 0)
+        flat_topk_idx = topk_idx.view(-1)
+        hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
+        y = torch.empty_like(hidden_states)
+        for i in range(self.n_routed_experts):
+            hidden_state = hidden_states[flat_topk_idx == i]
+            y[flat_topk_idx == i] = self.experts(hidden_state, expert_idx=i)
 
-            input_splits, output_splits, num_global_tokens_per_local_expert, num_global_sum_tokens_per_local_expert = (
-                preprocess(
-                    expert_mask=expert_mask,
-                    num_experts=self.n_routed_experts,
-                    ep_group=get_parallel_state().ep_group,
-                )
-            )
-
-            permute_tokens, routing_map, local_input_permutation_mapping, org_hidden_states_shape = token_pre_all2all(
-                hidden_states=hidden_states,
-                expert_mask=expert_mask,
-                num_experts=self.n_routed_experts,
-                input_splits=input_splits,
-                output_splits=output_splits,
-                num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
-                ep_group=get_parallel_state().ep_group,
-            )
-
-            cumsum = torch.cat([torch.tensor([0]), num_global_sum_tokens_per_local_expert.cumsum(dim=0)])
-
-            # Loop over all available experts in the model and perform the computation on each expert
-            final_permute_tokens = torch.zeros(
-                (permute_tokens.shape),
-                dtype=permute_tokens.dtype,
-                device=permute_tokens.device,
-            )
-            num_local_experts = self.n_routed_experts // get_parallel_state().ep_size
-            for expert_idx in range(num_local_experts):
-                start_idx = cumsum[expert_idx]
-                end_idx = cumsum[expert_idx + 1]
-
-                current_permute_tokens = permute_tokens[start_idx:end_idx]
-                final_permute_tokens[start_idx:end_idx] = self.experts(current_permute_tokens, index=expert_idx)
-
-            # unpermute with routing_weight
-            unpermute_tokens = tokens_post_all2all(
-                expert_outputs=final_permute_tokens,
-                routing_weights=topk_weight,
-                selected_experts=selected_experts,
-                num_experts=self.n_routed_experts,
-                input_splits=input_splits,
-                output_splits=output_splits,
-                num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
-                routing_map=routing_map,
-                local_input_permutation_mapping=local_input_permutation_mapping,
-                org_hidden_states_shape=org_hidden_states_shape,
-                ep_group=get_parallel_state().ep_group,
-            )
-
-            # to orgin shape
-            y = unpermute_tokens.to(hidden_states.dtype).view(*orig_shape)
-        else:
-            flat_topk_idx = topk_idx.view(-1)
-            hidden_states = hidden_states.repeat_interleave(self.num_experts_per_tok, dim=0)
-            y = torch.empty_like(hidden_states)
-            for i in range(self.n_routed_experts):
-                hidden_state = hidden_states[flat_topk_idx == i]
-                y[flat_topk_idx == i] = self.experts(hidden_state, index=i)
-
-            y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
-            y = y.to(hidden_states.dtype).view(*orig_shape)
+        y = (y.view(*topk_weight.shape, -1) * topk_weight.unsqueeze(-1)).sum(dim=1)
+        y = y.to(hidden_states.dtype).view(*orig_shape)
 
         if self.config.n_shared_experts is not None:
             y = y + self.shared_experts(identity)
@@ -527,73 +471,19 @@ class DeepseekV3FusedMoE(DeepseekV3MoE):
 
     def forward(self, hidden_states):
         identity = hidden_states
-        orig_shape = hidden_states.shape
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
         topk_idx, topk_weight = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
-        if self.training and get_parallel_state().ep_enabled:
-            selected_experts = topk_idx
-            expert_mask = torch.nn.functional.one_hot(topk_idx, num_classes=self.n_routed_experts).permute(2, 1, 0)
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+        final_hidden_states = self.experts(hidden_states, routing_weights=topk_weight, selected_experts=topk_idx)
 
-            input_splits, output_splits, num_global_tokens_per_local_expert, num_global_sum_tokens_per_local_expert = (
-                preprocess(
-                    expert_mask=expert_mask,
-                    num_experts=self.n_routed_experts,
-                    ep_group=get_parallel_state().ep_group,
-                )
-            )
-
-            permute_tokens, routing_map, local_input_permutation_mapping, org_hidden_states_shape = token_pre_all2all(
-                hidden_states=hidden_states,
-                expert_mask=expert_mask,
-                num_experts=self.n_routed_experts,
-                input_splits=input_splits,
-                output_splits=output_splits,
-                num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
-                ep_group=get_parallel_state().ep_group,
-            )
-
-            cumsum = torch.cumsum(num_global_sum_tokens_per_local_expert, dim=0).to(permute_tokens.device)
-
-            final_permute_tokens = torch.zeros(
-                (permute_tokens.shape),
-                dtype=permute_tokens.dtype,
-                device=permute_tokens.device,
-            )
-
-            final_permute_tokens = self.experts(permute_tokens, cumsum=cumsum)
-
-            # unpermute with routing_weight
-            unpermute_tokens = tokens_post_all2all(
-                expert_outputs=final_permute_tokens,
-                routing_weights=topk_weight,
-                selected_experts=selected_experts,
-                num_experts=self.n_routed_experts,
-                input_splits=input_splits,
-                output_splits=output_splits,
-                num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
-                routing_map=routing_map,
-                local_input_permutation_mapping=local_input_permutation_mapping,
-                org_hidden_states_shape=org_hidden_states_shape,
-                ep_group=get_parallel_state().ep_group,
-            )
-
-            # to orgin shape
-            y = unpermute_tokens.to(hidden_states.dtype).view(*orig_shape)
-        else:
-            y = fused_moe_forward(
-                self.n_routed_experts,
-                topk_weight,
-                topk_idx,
-                hidden_states,
-                self.experts.fc1_1,
-                self.experts.fc1_2,
-                self.experts.fc2,
-            )
         if self.config.n_shared_experts is not None:
-            y = y + self.shared_experts(identity)
+            final_hidden_states = final_hidden_states + self.shared_experts(identity)
 
-        return y
+        return final_hidden_states
 
 
 DS_V3_MOE_CLASSES = {
@@ -1050,7 +940,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Experts):
+        elif isinstance(module, DeepSeekV3Experts):
             module.fc1_1.data.normal_(mean=0.0, std=std)
             module.fc1_2.data.normal_(mean=0.0, std=std)
             module.fc2.data.normal_(mean=0.0, std=std)

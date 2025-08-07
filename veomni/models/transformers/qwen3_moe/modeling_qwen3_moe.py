@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -43,17 +44,13 @@ from transformers.utils import (
 )
 from transformers.utils.deprecation import deprecate_kwarg
 
-from ....distributed.moe import preprocess, token_pre_all2all, tokens_post_all2all
 from ....distributed.parallel_state import get_parallel_state
 from ....distributed.sequence_parallel import slice_position_embedding
-from ....ops.loss import causallm_loss_function
+from ....ops import causallm_loss_function, fused_moe_forward
 from ....utils import logging
-from ....utils.import_utils import is_fused_moe_available, is_liger_kernel_available
+from ....utils.import_utils import is_liger_kernel_available
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
-
-if is_fused_moe_available():
-    from ....distributed.moe import EPGroupGemm, fused_moe_forward, preprocess, token_pre_all2all, tokens_post_all2all
 
 if is_liger_kernel_available():
     from liger_kernel.ops.swiglu import LigerSiLUMulFunction
@@ -185,23 +182,28 @@ class Qwen3MoeExperts(nn.Module):
         )
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states, expert_idx=None, cumsum=None):
-        if cumsum is not None:
-            assert self.training and get_parallel_state().ep_enabled
-            final_permute_tokens = EPGroupGemm.apply(
-                hidden_states,
-                cumsum,
-                self.gate_proj,
-                self.up_proj,
-                self.down_proj,
-            )
-            return final_permute_tokens
-        else:
+    def forward(self, hidden_states, expert_idx=None, routing_weights=None, selected_experts=None):
+        if expert_idx is not None:
             gate_proj_out = torch.matmul(hidden_states, self.gate_proj[expert_idx].transpose(0, 1))
             up_proj_out = torch.matmul(hidden_states, self.up_proj[expert_idx].transpose(0, 1))
 
             out = self.act_fn(gate_proj_out) * up_proj_out
             out = torch.matmul(out, self.down_proj[expert_idx].transpose(0, 1))
+        else:
+            assert routing_weights is not None and selected_experts is not None, (
+                "routing_weights and selected_experts must be provided when expert_idx is None"
+            )
+
+            out = fused_moe_forward(
+                module=self,
+                num_experts=self.num_experts,
+                routing_weights=routing_weights,
+                selected_experts=selected_experts,
+                hidden_states=hidden_states,
+                fc1_1_weight=self.gate_proj,
+                fc1_2_weight=self.up_proj,
+                fc2_weight=self.down_proj,
+            )
         return out
 
 
@@ -275,6 +277,14 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
+
+@dataclass
+class ModelingFlashAttnExtraConfig:
+    cu_seq_lens_k: torch.Tensor = None
+    cu_seq_lens_q: torch.Tensor = None
+    max_length_q: int = 0
+    max_length_k: int = 0
 
 
 class Qwen3MoeAttention(nn.Module):
@@ -412,20 +422,11 @@ class Qwen3MoeSparseFusedMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
 
-        self.experts = nn.ModuleDict()
-        if get_parallel_state().ep_enabled:
-            self.ep_size = get_parallel_state().ep_size
-            self.ep_rank = get_parallel_state().ep_group
-            self.experts_per_rank = config.num_experts // self.ep_size
-
-            self.experts = Qwen3MoeExperts(config)
-        else:
-            self.experts = Qwen3MoeExperts(config)
+        self.experts = Qwen3MoeExperts(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        origin_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # router_logits: (batch * sequence_length, n_experts)
         router_logits = self.gate(hidden_states)
@@ -441,65 +442,10 @@ class Qwen3MoeSparseFusedMoeBlock(nn.Module):
             (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
         )
 
-        if self.training and get_parallel_state().ep_enabled:
-            # One hot encode the selected experts to create an expert mask
-            # this will be used to easily index which expert is going to be sollicitated
-            expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
-            input_splits, output_splits, num_global_tokens_per_local_expert, num_global_sum_tokens_per_local_expert = (
-                preprocess(
-                    expert_mask=expert_mask,
-                    num_experts=self.num_experts,
-                    ep_group=get_parallel_state().ep_group,
-                )
-            )
+        final_hidden_states = self.experts(
+            hidden_states, routing_weights=routing_weights, selected_experts=selected_experts
+        )
 
-            permute_tokens, routing_map, local_input_permutation_mapping, org_hidden_states_shape = token_pre_all2all(
-                hidden_states=hidden_states,
-                expert_mask=expert_mask,
-                num_experts=self.num_experts,
-                input_splits=input_splits,
-                output_splits=output_splits,
-                num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
-                ep_group=get_parallel_state().ep_group,
-            )
-
-            cumsum = torch.cumsum(num_global_sum_tokens_per_local_expert, dim=0).to(permute_tokens.device)
-
-            final_permute_tokens = torch.zeros(
-                (permute_tokens.shape),
-                dtype=permute_tokens.dtype,
-                device=permute_tokens.device,
-            )
-
-            final_permute_tokens = self.experts(hidden_states=permute_tokens, cumsum=cumsum)
-
-            # unpermute with routing_weight
-            unpermute_tokens = tokens_post_all2all(
-                expert_outputs=final_permute_tokens,
-                routing_weights=routing_weights,
-                selected_experts=selected_experts,
-                num_experts=self.num_experts,
-                input_splits=input_splits,
-                output_splits=output_splits,
-                num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
-                routing_map=routing_map,
-                local_input_permutation_mapping=local_input_permutation_mapping,
-                org_hidden_states_shape=org_hidden_states_shape,
-                ep_group=get_parallel_state().ep_group,
-            )
-
-            # to orgin shape
-            final_hidden_states = unpermute_tokens.to(hidden_states.dtype).view(*origin_shape)
-        else:
-            final_hidden_states = fused_moe_forward(
-                self.num_experts,
-                routing_weights,
-                selected_experts,
-                hidden_states,
-                self.experts.gate_proj,
-                self.experts.up_proj,
-                self.experts.down_proj,
-            )
         return final_hidden_states, router_logits
 
 
@@ -540,6 +486,7 @@ class Qwen3MoeDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        modelingFlashAttnExtraConfig: Optional[ModelingFlashAttnExtraConfig] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -571,6 +518,12 @@ class Qwen3MoeDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
+        if modelingFlashAttnExtraConfig is not None:
+            kwargs["cu_seq_lens_q"] = modelingFlashAttnExtraConfig.cu_seq_lens_q
+            kwargs["cu_seq_lens_k"] = modelingFlashAttnExtraConfig.cu_seq_lens_k
+            kwargs["max_length_q"] = modelingFlashAttnExtraConfig.max_length_q
+            kwargs["max_length_k"] = modelingFlashAttnExtraConfig.max_length_k
+
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -581,6 +534,7 @@ class Qwen3MoeDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -757,6 +711,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
         )
         self.norm = Qwen3MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3MoeRotaryEmbedding(config=config)
+
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -767,6 +722,26 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
+
+    def prepare_fa2_from_position_ids(self, position_ids):
+        position_ids = position_ids.flatten()
+        indices_q = torch.arange(position_ids.size(0), device=position_ids.device, dtype=torch.int32)
+
+        cu_seq_lens = torch.cat(
+            (
+                indices_q[position_ids == 0],
+                torch.tensor(position_ids.size(), device=position_ids.device, dtype=torch.int32),
+            )
+        )
+
+        # max_length在不同的model里面type不同
+        # modeling_qwen3_moe_foundation/modeling_qwen2_5_omni里为tensor
+        # modeling_qwen2_vl的为int
+        # 此处采用有.item()的写法，在decoder layers之前拿到int type的max_length
+        # 否则在decoder里面仍然每一层都会触发.item()
+        max_length = cu_seq_lens.diff().max().item()
+
+        return (indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
     @add_start_docstrings_to_model_forward(QWEN3_MOE_INPUTS_DOCSTRING)
     def forward(
@@ -837,6 +812,20 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_router_logits = () if output_router_logits else None
 
+        modelingFlashAttnExtraConfig = ModelingFlashAttnExtraConfig()
+        if position_ids is not None:
+            # for bsh cases, cache_position.unsqueeze(0) will create a tensor of shape [1,max_seq_len]
+            # we expand it to make it match the batch size otherwise the calculated cu_seq_len and max_length might be wrong
+            if position_ids.shape[0] != input_ids.shape[0]:
+                position_ids = position_ids.expand(input_ids.shape[0], -1)
+            _, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = self.prepare_fa2_from_position_ids(
+                position_ids
+            )
+            modelingFlashAttnExtraConfig.cu_seq_lens_q = cu_seq_lens_q
+            modelingFlashAttnExtraConfig.cu_seq_lens_k = cu_seq_lens_k
+            modelingFlashAttnExtraConfig.max_length_k = max_length_k
+            modelingFlashAttnExtraConfig.max_length_q = max_length_q
+
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -853,6 +842,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
                     use_cache,
                     cache_position,
                     position_embeddings,
+                    modelingFlashAttnExtraConfig,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -865,6 +855,7 @@ class Qwen3MoeModel(Qwen3MoePreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
+                    modelingFlashAttnExtraConfig=modelingFlashAttnExtraConfig,
                     **flash_attn_kwargs,
                 )
 

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-from .fused_moe import fused_moe_forward
 from .moe_layer import EPGroupGemm, preprocess, token_pre_all2all, tokens_post_all2all
 
 
