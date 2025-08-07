@@ -22,10 +22,12 @@ from PIL import Image
 from torchvision import transforms
 
 from veomni.utils import logging
+<<<<<<< HEAD
 
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
 
 logger = logging.get_logger(__name__)
-
 
 class TensorDataset(torch.utils.data.Dataset):
     def __init__(self, base_path, metadata_path, datasets_repeat=1):
@@ -78,10 +80,11 @@ class Text2ImageDataset(torch.utils.data.Dataset):
         image = torchvision.transforms.functional.resize(image,shape,interpolation=transforms.InterpolationMode.BILINEAR)
         image = self.image_processor(image)
         return [{"text": text, "image": image}]
-    
+
     def __len__(self):
         return len(self.path) * self.datasets_repeat
 
+<<<<<<< HEAD
 
 class Text2ImageDataset(torch.utils.data.Dataset):
     def __init__(
@@ -130,6 +133,8 @@ class Text2ImageDataset(torch.utils.data.Dataset):
         return len(self.path) * self.datasets_repeat
 
 
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
 def build_tensor_dataset(base_path, metadata_path, datasets_repeat=1):
     return TensorDataset(base_path, metadata_path, datasets_repeat)
 

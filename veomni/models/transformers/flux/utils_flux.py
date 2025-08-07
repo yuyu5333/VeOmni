@@ -922,10 +922,14 @@ class SDVAEEncoderStateDictConverter:
             "encoder.conv_out": "conv_out",
         }
 <<<<<<< HEAD
+<<<<<<< HEAD
         name_list = sorted(state_dict)
 =======
         name_list = sorted([name for name in state_dict])
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        name_list = sorted(list(state_dict))
+>>>>>>> 48040b0 ([model] fix: format flux code)
         rename_dict = {}
         block_id = {"ResnetBlock": -1, "DownSampler": -1, "UpSampler": -1}
         last_block_type_with_id = {"ResnetBlock": "", "DownSampler": "", "UpSampler": ""}
@@ -1205,11 +1209,15 @@ class FluxVAEEncoderStateDictConverter(SDVAEEncoderStateDictConverter):
                 state_dict_[rename_dict[name]] = param
         return state_dict_
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 
 =======
     
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 48040b0 ([model] fix: format flux code)
 class FluxDiTStateDictConverter:
     def __init__(self):
         pass

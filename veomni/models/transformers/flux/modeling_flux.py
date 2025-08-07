@@ -30,11 +30,18 @@ from veomni.models.transformers.flux.utils_flux import (
     FluxDiTStateDictConverter,
     TileWorker,
     TimestepEmbeddings,
+    FluxDiTStateDictConverter,
     init_weights_on_device,
 )
+<<<<<<< HEAD
 from veomni.utils import logging
 from veomni.utils.import_utils import is_liger_kernel_available
 
+=======
+
+from veomni.utils import logging
+from veomni.utils.import_utils import is_liger_kernel_available
+>>>>>>> 48040b0 ([model] fix: format flux code)
 
 try:
     import flash_attn_interface
@@ -48,7 +55,10 @@ try:
 except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
 def print_rank_0(message):
     """If distributed is initialized, print only on rank 0."""
     if torch.distributed.is_initialized():
@@ -57,7 +67,10 @@ def print_rank_0(message):
     else:
         print(message, flush=True)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
 if is_liger_kernel_available():
     from liger_kernel.transformers.rms_norm import LigerRMSNorm
 
@@ -544,6 +557,7 @@ class FluxModel(PreTrainedModel):
         self.gradient_checkpointing = False
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     def prepare_extra_input(self, latents=None, guidance=1.0):
         latent_image_ids = self.dit.prepare_image_ids(latents)
@@ -553,10 +567,13 @@ class FluxModel(PreTrainedModel):
 
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
     def patchify(self, hidden_states):
         hidden_states = rearrange(hidden_states, "B C (H P) (W Q) -> B (H W) (C P Q)", P=2, Q=2)
         return hidden_states
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     def unpatchify(self, hidden_states, height, width):
         if height % 2 != 0 or width % 2 != 0:
@@ -571,20 +588,20 @@ class FluxModel(PreTrainedModel):
 
 =======
     
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
     def unpatchify(self, hidden_states, height, width):
-        
         if height % 2 != 0 or width % 2 != 0:
             print_rank_0(f"Error: height({height}) or width({width}) not divisible by 2!")
-        
+
         H = height // 2
         W = width // 2
         C = hidden_states.shape[-1] // (2 * 2)  # 计算推断的通道数
-        
-        output = rearrange(hidden_states, "B (H W) (C P Q) -> B C (H P) (W Q)", 
-                        P=2, Q=2, H=H, W=W)
-        
-        return output
 
+        output = rearrange(hidden_states, "B (H W) (C P Q) -> B C (H P) (W Q)", 
+                        P=2, Q=2, H=H, W=W, C=C)
+
+        return output
 
 >>>>>>> 858efdb ([model] feat: add flux)
     def prepare_image_ids(self, latents):
@@ -685,10 +702,14 @@ class FluxModel(PreTrainedModel):
         if entity_masks is not None:
             # entity_masks
 <<<<<<< HEAD
+<<<<<<< HEAD
             max_masks = entity_masks.shape[1]
 =======
             batch_size, max_masks = entity_masks.shape[0], entity_masks.shape[1]
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            max_masks = entity_masks.shape[1]
+>>>>>>> 48040b0 ([model] fix: format flux code)
             entity_masks = entity_masks.repeat(1, 1, repeat_dim, 1, 1)
             entity_masks = [entity_masks[:, i, None].squeeze(1) for i in range(max_masks)]
             # global mask
@@ -972,7 +993,6 @@ class FluxModel(PreTrainedModel):
     @staticmethod
     def state_dict_converter():
         return FluxDiTStateDictConverter()
-
 
 if is_liger_kernel_available():
     RMSNorm = LigerRMSNorm

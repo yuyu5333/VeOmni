@@ -1,7 +1,7 @@
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List
 
 import torch
 import torch.distributed as dist
@@ -552,7 +552,10 @@ def main():
     dist.barrier()
     dist.destroy_process_group()
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 48040b0 ([model] fix: format flux code)
 def save_hf_weights(args, save_checkpoint_path, model_assets):
     hf_weights_path = os.path.join(save_checkpoint_path, "hf_ckpt")
     model_state_dict = ckpt_to_state_dict(
