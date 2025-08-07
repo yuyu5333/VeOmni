@@ -101,20 +101,21 @@ class Qwen3MoeSparseFusedMoeBlock(nn.Module):
 
       self.experts = Qwen3MoeExperts(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states, expert_idx=None, routing_weights=None, selected_experts=None) -> torch.Tensor:
 
           ...
 
-      final_hidden_states = fused_moe_forward(
-          self.num_experts,
-          routing_weights,
-          selected_experts,
-          hidden_states,
-          self.experts.gate_proj,
-          self.experts.up_proj,
-          self.experts.down_proj,
-      )
-      return final_hidden_states
+        out = fused_moe_forward(
+            module=self,
+            num_experts=self.num_experts,
+            routing_weights=routing_weights,
+            selected_experts=selected_experts,
+            hidden_states=hidden_states,
+            fc1_1_weight=self.gate_proj,
+            fc1_2_weight=self.up_proj,
+            fc2_weight=self.down_proj,
+        )
+      return out
 
 ```
 

@@ -15,12 +15,14 @@
 
 import torch
 
-from ...utils.import_utils import is_fused_moe_available
+from ..distributed.moe import EPGroupGemm, preprocess, token_pre_all2all, tokens_post_all2all
+from ..distributed.parallel_state import get_parallel_state
+from ..utils.import_utils import is_fused_moe_available
 
 
 if is_fused_moe_available():
-    from ...ops.group_gemm.kernel.group_gemm import group_gemm_same_mn, group_gemm_same_nk
-    from ...ops.group_gemm.kernel.moe import expert_histogram, moe_gather, moe_scatter
+    from .group_gemm.kernel.group_gemm import group_gemm_same_mn, group_gemm_same_nk
+    from .group_gemm.kernel.moe import expert_histogram, moe_gather, moe_scatter
 
 
 class FusedMoeExpertFunction(torch.autograd.Function):
@@ -270,23 +272,77 @@ class FusedMoeExpertFunction(torch.autograd.Function):
 
 
 def fused_moe_forward(
-    num_experts,
-    routing_weights,
-    selected_experts,
-    hidden_states,
-    fc1_1_weight,
-    fc1_2_weight,
-    fc2_weight,
+    module: torch.nn.Module,
+    num_experts: int,
+    routing_weights: torch.Tensor,
+    selected_experts: torch.Tensor,
+    hidden_states: torch.Tensor,
+    fc1_1_weight: torch.Tensor,
+    fc1_2_weight: torch.Tensor,
+    fc2_weight: torch.Tensor,
 ):
-    routing_weights = routing_weights.bfloat16()
-    hidden_states = hidden_states.bfloat16()
-    experts_output = FusedMoeExpertFunction.apply(
-        num_experts,
-        routing_weights,
-        selected_experts,
-        hidden_states,
-        fc1_1_weight,
-        fc1_2_weight,
-        fc2_weight,
-    )
-    return experts_output
+    if module.training and get_parallel_state().ep_enabled:
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=num_experts).permute(2, 1, 0)
+        # preprocess, permute token for ep
+        input_splits, output_splits, num_global_tokens_per_local_expert, num_global_sum_tokens_per_local_expert = (
+            preprocess(
+                expert_mask=expert_mask,
+                num_experts=num_experts,
+                ep_group=get_parallel_state().ep_group,
+            )
+        )
+        permute_tokens, routing_map, local_input_permutation_mapping, org_hidden_states_shape = token_pre_all2all(
+            hidden_states=hidden_states,
+            expert_mask=expert_mask,
+            num_experts=num_experts,
+            input_splits=input_splits,
+            output_splits=output_splits,
+            num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
+            ep_group=get_parallel_state().ep_group,
+        )
+
+        final_permute_tokens = torch.zeros(
+            (permute_tokens.shape),
+            dtype=permute_tokens.dtype,
+            device=permute_tokens.device,
+        )
+
+        cumsum = torch.cumsum(num_global_sum_tokens_per_local_expert, dim=0).to(permute_tokens.device)
+
+        final_permute_tokens = EPGroupGemm.apply(
+            permute_tokens,
+            cumsum,
+            fc1_1_weight,
+            fc1_2_weight,
+            fc2_weight,
+        )
+
+        # unpermute with routing_weight
+        final_hidden_states = tokens_post_all2all(
+            expert_outputs=final_permute_tokens,
+            routing_weights=routing_weights,
+            selected_experts=selected_experts,
+            num_experts=num_experts,
+            input_splits=input_splits,
+            output_splits=output_splits,
+            num_global_tokens_per_local_expert=num_global_tokens_per_local_expert,
+            routing_map=routing_map,
+            local_input_permutation_mapping=local_input_permutation_mapping,
+            org_hidden_states_shape=org_hidden_states_shape,
+            ep_group=get_parallel_state().ep_group,
+        )
+
+    else:
+        routing_weights = routing_weights.bfloat16()
+        hidden_states = hidden_states.bfloat16()
+        final_hidden_states = FusedMoeExpertFunction.apply(
+            num_experts,
+            routing_weights,
+            selected_experts,
+            hidden_states,
+            fc1_1_weight,
+            fc1_2_weight,
+            fc2_weight,
+        )
+
+    return final_hidden_states
