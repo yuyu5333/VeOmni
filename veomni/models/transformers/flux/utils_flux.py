@@ -647,7 +647,7 @@ class SDVAEEncoderStateDictConverter:
             "encoder.conv_norm_out": "conv_norm_out",
             "encoder.conv_out": "conv_out",
         }
-        name_list = sorted(list(state_dict))
+        name_list = sorted([name for name in state_dict])
         rename_dict = {}
         block_id = {"ResnetBlock": -1, "DownSampler": -1, "UpSampler": -1}
         last_block_type_with_id = {"ResnetBlock": "", "DownSampler": "", "UpSampler": ""}
