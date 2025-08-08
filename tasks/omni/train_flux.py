@@ -1,14 +1,17 @@
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 import torch
 import torch.distributed as dist
 import wandb
 from tqdm import trange
-
-from transformers import CLIPTokenizer, T5TokenizerFast
+from transformers import (
+    AutoConfig,
+    CLIPTokenizer,
+    T5TokenizerFast,
+)
 
 from veomni.checkpoint import build_checkpointer, ckpt_to_state_dict
 from veomni.data.diffusion.data_loader import build_dit_dataloader
@@ -24,22 +27,20 @@ from veomni.models.transformers.flux.encode_flux import (
     load_model_from_huggingface_folder,
     load_model_from_single_file,
 )
+from veomni.models.transformers.flux.modeling_flux import FluxModel
 from veomni.models.transformers.flux.utils_flux import FluxTextEncoder2, FluxVAEEncoder, SD3TextEncoder1
 from veomni.optim import build_lr_scheduler, build_optimizer
 from veomni.schedulers.flow_match import FlowMatchScheduler
 from veomni.utils import helper
 from veomni.utils.arguments import DataArguments, ModelArguments, TrainingArguments, parse_args, save_args
-from veomni.utils.dit_utils import EnvironMeter, save_model_weights
 from veomni.utils.dist_utils import all_reduce
+from veomni.utils.dit_utils import EnvironMeter, save_model_weights
 from veomni.utils.lora_utils import add_lora_to_model, freeze_parameters
 from veomni.utils.recompute_utils import convert_ops_to_objects
 
-from transformers import (
-    AutoConfig,
-)
-from veomni.models.transformers.flux.modeling_flux import FluxModel
 
 logger = helper.create_logger(__name__)
+
 
 @dataclass
 class MyDataArguments(DataArguments):
@@ -55,6 +56,7 @@ class MyDataArguments(DataArguments):
         default=1,
         metadata={"help": "The number of times to repeat the datasets."},
     )
+
 
 @dataclass
 class MyModelArguments(ModelArguments):
@@ -103,6 +105,7 @@ class MyModelArguments(ModelArguments):
         metadata={"help": "Pretrained LoRA path. Required if the training is resumed."},
     )
 
+
 @dataclass
 class MyTrainingArguments(TrainingArguments):
     save_initial_model: bool = field(
@@ -122,11 +125,13 @@ class MyTrainingArguments(TrainingArguments):
         metadata={"help": "Model structure to train. LoRA training or full training."},
     )
 
+
 @dataclass
 class Arguments:
     model: MyModelArguments = field(default_factory=MyModelArguments)
     data: MyDataArguments = field(default_factory=MyDataArguments)
     train: MyTrainingArguments = field(default_factory=MyTrainingArguments)
+
 
 def get_param_groups(model: torch.nn.Module, default_lr: float, vit_lr: float):
     vit_params, other_params = [], []
@@ -167,10 +172,11 @@ def main():
         ulysses_size=args.train.ulysses_parallel_size,
         dp_mode=args.train.data_parallel_mode,
     )
-    logger.info_rank0(f"Parallel state: dp:{args.train.data_parallel_mode}, tp:{args.train.tensor_parallel_size}, ep:{args.train.expert_parallel_size}, pp:{args.train.pipeline_parallel_size}, cp:{args.train.context_parallel_size}, ulysses:{args.train.ulysses_parallel_size}")
+    logger.info_rank0(
+        f"Parallel state: dp:{args.train.data_parallel_mode}, tp:{args.train.tensor_parallel_size}, ep:{args.train.expert_parallel_size}, pp:{args.train.pipeline_parallel_size}, cp:{args.train.context_parallel_size}, ulysses:{args.train.ulysses_parallel_size}"
+    )
 
     if args.data.data_type == "diffusion":
-
         train_dataset = build_text_image_dataset(
             base_path=args.data.train_path,
             metadata_path=os.path.join(args.data.train_path, "metadata.csv"),
@@ -202,26 +208,48 @@ def main():
     else:
         raise NotImplementedError(f"Unsupported data type: {args.data.data_type}.")
 
-
     # build foundation model
     config_kwargs = {}
     config = AutoConfig.from_pretrained(args.model.config_path, trust_remote_code=True, **config_kwargs)
     model = FluxModel(config)
-    model_weights = load_model(file_path=args.model.model_path, device=f"cuda:{args.train.local_rank}", torch_dtype=torch.bfloat16)
-    model_weights = load_model_from_single_file(state_dict=model_weights, model_class=model, model_resource="civitai", torch_dtype=torch.bfloat16, device=f"cuda:{args.train.local_rank}")
+    model_weights = load_model(
+        file_path=args.model.model_path, device=f"cuda:{args.train.local_rank}", torch_dtype=torch.bfloat16
+    )
+    model_weights = load_model_from_single_file(
+        state_dict=model_weights,
+        model_class=model,
+        model_resource="civitai",
+        torch_dtype=torch.bfloat16,
+        device=f"cuda:{args.train.local_rank}",
+    )
     model.load_state_dict(model_weights)
     model.micro_batch_size = args.train.micro_batch_size
 
     tokenizer_1 = CLIPTokenizer.from_pretrained(args.model.tokenizer_1_path)
     tokenizer_2 = T5TokenizerFast.from_pretrained(args.model.tokenizer_2_path)
     text_encoder_1 = SD3TextEncoder1(vocab_size=49408)
-    text_encoder_1_weights = load_model(file_path=args.model.pretrained_text_encoder_path, device="cuda", torch_dtype=torch.bfloat16)
+    text_encoder_1_weights = load_model(
+        file_path=args.model.pretrained_text_encoder_path, device="cuda", torch_dtype=torch.bfloat16
+    )
     converted_text_encoder_1_weights = from_diffusers(text_encoder_1_weights)
     text_encoder_1.load_state_dict(converted_text_encoder_1_weights)
-    text_encoder_2 = load_model_from_huggingface_folder(file_path=args.model.pretrained_text_encoder_2_path, model_classes=FluxTextEncoder2, torch_dtype=torch.bfloat16, device="cuda")
+    text_encoder_2 = load_model_from_huggingface_folder(
+        file_path=args.model.pretrained_text_encoder_2_path,
+        model_classes=FluxTextEncoder2,
+        torch_dtype=torch.bfloat16,
+        device="cuda",
+    )
     vae_encoder = FluxVAEEncoder()
-    vae_encoder_weights = load_model(file_path=args.model.pretrained_vae_path, device="cuda", torch_dtype=torch.bfloat16)
-    vae_encoder_weights = load_model_from_single_file(state_dict=vae_encoder_weights, model_class=vae_encoder, model_resource="civitai", torch_dtype=torch.bfloat16, device="cuda")
+    vae_encoder_weights = load_model(
+        file_path=args.model.pretrained_vae_path, device="cuda", torch_dtype=torch.bfloat16
+    )
+    vae_encoder_weights = load_model_from_single_file(
+        state_dict=vae_encoder_weights,
+        model_class=vae_encoder,
+        model_resource="civitai",
+        torch_dtype=torch.bfloat16,
+        device="cuda",
+    )
     if hasattr(vae_encoder, "eval"):
         vae_encoder = vae_encoder.eval()
     vae_encoder.load_state_dict(vae_encoder_weights)
@@ -388,11 +416,19 @@ def main():
             except StopIteration:
                 logger.info(f"epoch:{epoch} Dataloader finished with drop_last {args.data.drop_last}")
                 break
-            
+
             for batch in micro_batches:
                 # Data
                 text, image = batch["text"], batch["image"]
-                prompt_emb = encode_prompt(prompt=text, positive=True, device=model.device ,text_encoder_1=text_encoder_1.to(model.device), tokenizer_1=tokenizer_1, text_encoder_2=text_encoder_2.to(model.device), tokenizer_2=tokenizer_2)
+                prompt_emb = encode_prompt(
+                    prompt=text,
+                    positive=True,
+                    device=model.device,
+                    text_encoder_1=text_encoder_1.to(model.device),
+                    tokenizer_1=tokenizer_1,
+                    text_encoder_2=text_encoder_2.to(model.device),
+                    tokenizer_2=tokenizer_2,
+                )
                 if "latents" in batch:
                     latents = batch["latents"].to(dtype=torch.bfloat16, device=model.device)
                 else:
@@ -405,12 +441,17 @@ def main():
                 timestep = flow_scheduler.timesteps[timestep_id].to(latents.dtype).to(latents.device)
                 extra_input = model.prepare_extra_input(latents)
                 # noise and target
-                noisy_latents = flow_scheduler.add_noise(latents, noise, timestep, args.train.micro_batch_size, args.train.enable_mixed_precision)
+                noisy_latents = flow_scheduler.add_noise(
+                    latents, noise, timestep, args.train.micro_batch_size, args.train.enable_mixed_precision
+                )
                 training_target = flow_scheduler.training_target(latents, noise, timestep)
                 # predict noise
                 with model_fwd_context:
                     noise_pred = model.forward(
-                        noisy_latents, timestep=timestep, **prompt_emb, **extra_input,
+                        noisy_latents,
+                        timestep=timestep,
+                        **prompt_emb,
+                        **extra_input,
                     )
                     # MSE loss with weights
                     loss = torch.nn.functional.mse_loss(noise_pred.float(), training_target.float(), reduction="none")
@@ -511,6 +552,7 @@ def main():
     dist.barrier()
     dist.destroy_process_group()
 
+
 def save_hf_weights(args, save_checkpoint_path, model_assets):
     hf_weights_path = os.path.join(save_checkpoint_path, "hf_ckpt")
     model_state_dict = ckpt_to_state_dict(
@@ -526,6 +568,7 @@ def save_hf_weights(args, save_checkpoint_path, model_assets):
         model_assets=model_assets,
     )
     logger.info_rank0(f"Huggingface checkpoint saved at {hf_weights_path} successfully!")
+
 
 if __name__ == "__main__":
     main()

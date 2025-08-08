@@ -29,7 +29,7 @@ def get_timestep_embedding(
     downscale_freq_shift: float = 1,
     scale: float = 1,
     max_period: int = 10000,
-    computation_device = None,
+    computation_device=None,
 ):
     """
     This matches the implementation in Denoising Diffusion Probabilistic Models: Create sinusoidal timestep embeddings.
@@ -43,7 +43,10 @@ def get_timestep_embedding(
 
     half_dim = embedding_dim // 2
     exponent = -math.log(max_period) * torch.arange(
-        start=0, end=half_dim, dtype=torch.float32, device=timesteps.device if computation_device is None else computation_device
+        start=0,
+        end=half_dim,
+        dtype=torch.float32,
+        device=timesteps.device if computation_device is None else computation_device,
     )
     exponent = exponent / (half_dim - downscale_freq_shift)
 
@@ -69,7 +72,9 @@ def get_timestep_embedding(
 class TimestepEmbeddings(torch.nn.Module):
     def __init__(self, dim_in, dim_out, computation_device=None):
         super().__init__()
-        self.time_proj = TemporalTimesteps(num_channels=dim_in, flip_sin_to_cos=True, downscale_freq_shift=0, computation_device=computation_device)
+        self.time_proj = TemporalTimesteps(
+            num_channels=dim_in, flip_sin_to_cos=True, downscale_freq_shift=0, computation_device=computation_device
+        )
         self.timestep_embedder = torch.nn.Sequential(
             torch.nn.Linear(dim_in, dim_out), torch.nn.SiLU(), torch.nn.Linear(dim_out, dim_out)
         )
@@ -79,8 +84,9 @@ class TimestepEmbeddings(torch.nn.Module):
         time_emb = self.timestep_embedder(time_emb)
         return time_emb
 
+
 class TemporalTimesteps(torch.nn.Module):
-    def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float, computation_device = None):
+    def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float, computation_device=None):
         super().__init__()
         self.num_channels = num_channels
         self.flip_sin_to_cos = flip_sin_to_cos
@@ -97,10 +103,10 @@ class TemporalTimesteps(torch.nn.Module):
         )
         return t_emb
 
+
 class TileWorker:
     def __init__(self):
         pass
-
 
     def mask(self, height, width, border_width):
         # Create a mask with shape (height, width).
@@ -111,50 +117,44 @@ class TileWorker:
         mask = (mask / border_width).clip(0, 1)
         return mask
 
-
     def tile(self, model_input, tile_size, tile_stride, tile_device, tile_dtype):
         # Convert a tensor (b, c, h, w) to (b, c, tile_size, tile_size, tile_num)
         batch_size, channel, _, _ = model_input.shape
         model_input = model_input.to(device=tile_device, dtype=tile_dtype)
-        unfold_operator = torch.nn.Unfold(
-            kernel_size=(tile_size, tile_size),
-            stride=(tile_stride, tile_stride)
-        )
+        unfold_operator = torch.nn.Unfold(kernel_size=(tile_size, tile_size), stride=(tile_stride, tile_stride))
         model_input = unfold_operator(model_input)
         model_input = model_input.view((batch_size, channel, tile_size, tile_size, -1))
 
         return model_input
 
-
-    def tiled_inference(self, forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype):
+    def tiled_inference(
+        self, forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype
+    ):
         # Call y=forward_fn(x) for each tile
         tile_num = model_input.shape[-1]
         model_output_stack = []
 
         for tile_id in range(0, tile_num, tile_batch_size):
-
             # process input
             tile_id_ = min(tile_id + tile_batch_size, tile_num)
-            x = model_input[:, :, :, :, tile_id: tile_id_]
+            x = model_input[:, :, :, :, tile_id:tile_id_]
             x = x.to(device=inference_device, dtype=inference_dtype)
             x = rearrange(x, "b c h w n -> (n b) c h w")
 
             # process output
             y = forward_fn(x)
-            y = rearrange(y, "(n b) c h w -> b c h w n", n=tile_id_-tile_id)
+            y = rearrange(y, "(n b) c h w -> b c h w n", n=tile_id_ - tile_id)
             y = y.to(device=tile_device, dtype=tile_dtype)
             model_output_stack.append(y)
 
         model_output = torch.concat(model_output_stack, dim=-1)
         return model_output
 
-
     def io_scale(self, model_output, tile_size):
         # Determine the size modification happened in forward_fn
         # We only consider the same scale on height and width.
         io_scale = model_output.shape[2] / tile_size
         return io_scale
-
 
     def untile(self, model_output, height, width, tile_size, tile_stride, border_width, tile_device, tile_dtype):
         # The reversed function of tile
@@ -164,9 +164,7 @@ class TileWorker:
         model_output = model_output * mask
 
         fold_operator = torch.nn.Fold(
-            output_size=(height, width),
-            kernel_size=(tile_size, tile_size),
-            stride=(tile_stride, tile_stride)
+            output_size=(height, width), kernel_size=(tile_size, tile_size), stride=(tile_stride, tile_stride)
         )
         mask = repeat(mask[0, 0, :, :, 0], "h w -> 1 (h w) n", n=model_output.shape[-1])
         model_output = rearrange(model_output, "b c h w n -> b (c h w) n")
@@ -174,35 +172,48 @@ class TileWorker:
 
         return model_output
 
-
-    def tiled_forward(self, forward_fn, model_input, tile_size, tile_stride, tile_batch_size=1, tile_device="cpu", tile_dtype=torch.float32, border_width=None):
+    def tiled_forward(
+        self,
+        forward_fn,
+        model_input,
+        tile_size,
+        tile_stride,
+        tile_batch_size=1,
+        tile_device="cpu",
+        tile_dtype=torch.float32,
+        border_width=None,
+    ):
         # Prepare
         inference_device, inference_dtype = model_input.device, model_input.dtype
         height, width = model_input.shape[2], model_input.shape[3]
-        border_width = int(tile_stride*0.5) if border_width is None else border_width
+        border_width = int(tile_stride * 0.5) if border_width is None else border_width
 
         # tile
         model_input = self.tile(model_input, tile_size, tile_stride, tile_device, tile_dtype)
 
         # inference
-        model_output = self.tiled_inference(forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype)
+        model_output = self.tiled_inference(
+            forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype
+        )
 
         # resize
         io_scale = self.io_scale(model_output, tile_size)
-        height, width = int(height*io_scale), int(width*io_scale)
-        tile_size, tile_stride = int(tile_size*io_scale), int(tile_stride*io_scale)
-        border_width = int(border_width*io_scale)
+        height, width = int(height * io_scale), int(width * io_scale)
+        tile_size, tile_stride = int(tile_size * io_scale), int(tile_stride * io_scale)
+        border_width = int(border_width * io_scale)
 
         # untile
-        model_output = self.untile(model_output, height, width, tile_size, tile_stride, border_width, tile_device, tile_dtype)
+        model_output = self.untile(
+            model_output, height, width, tile_size, tile_stride, border_width, tile_device, tile_dtype
+        )
 
         # Done!
         model_output = model_output.to(device=inference_device, dtype=inference_dtype)
         return model_output
 
-@contextmanager
-def init_weights_on_device(device = torch.device("meta"), include_buffers :bool = False):
 
+@contextmanager
+def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = False):
     old_register_parameter = torch.nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = torch.nn.Module.register_buffer
@@ -249,6 +260,7 @@ def init_weights_on_device(device = torch.device("meta"), include_buffers :bool 
         for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
             setattr(torch, torch_function_name, old_torch_function)
 
+
 def low_version_attention(query, key, value, attn_bias=None):
     scale = 1 / query.shape[-1] ** 0.5
     query = query * scale
@@ -257,6 +269,7 @@ def low_version_attention(query, key, value, attn_bias=None):
         attn = attn + attn_bias
     attn = attn.softmax(-1)
     return attn @ value
+
 
 class FluxTextEncoder2(T5EncoderModel):
     def __init__(self, config):
@@ -272,7 +285,8 @@ class FluxTextEncoder2(T5EncoderModel):
     def state_dict_converter():
         return FluxTextEncoder2StateDictConverter()
 
-class FluxTextEncoder2StateDictConverter():
+
+class FluxTextEncoder2StateDictConverter:
     def __init__(self):
         pass
 
@@ -283,8 +297,8 @@ class FluxTextEncoder2StateDictConverter():
     def from_civitai(self, state_dict):
         return self.from_diffusers(state_dict)
 
-class Attention(torch.nn.Module):
 
+class Attention(torch.nn.Module):
     def __init__(self, q_dim, num_heads, head_dim, kv_dim=None, bias_q=False, bias_kv=False, bias_out=False):
         super().__init__()
         dim_inner = head_dim * num_heads
@@ -305,7 +319,9 @@ class Attention(torch.nn.Module):
         hidden_states = hidden_states + scale * ip_hidden_states
         return hidden_states
 
-    def torch_forward(self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None):
+    def torch_forward(
+        self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None
+    ):
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
 
@@ -348,6 +364,7 @@ class Attention(torch.nn.Module):
             hidden_states = low_version_attention(q, k, v, attn_bias=attn_mask)
         else:
             import xformers.ops as xops
+
             hidden_states = xops.memory_efficient_attention(q, k, v)
         hidden_states = rearrange(hidden_states, "(b n) f d -> b f (n d)", n=self.num_heads)
 
@@ -356,13 +373,24 @@ class Attention(torch.nn.Module):
 
         return hidden_states
 
-    def forward(self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None):
-        return self.torch_forward(hidden_states, encoder_hidden_states=encoder_hidden_states, attn_mask=attn_mask, ipadapter_kwargs=ipadapter_kwargs, qkv_preprocessor=qkv_preprocessor)
+    def forward(
+        self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None
+    ):
+        return self.torch_forward(
+            hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            attn_mask=attn_mask,
+            ipadapter_kwargs=ipadapter_kwargs,
+            qkv_preprocessor=qkv_preprocessor,
+        )
+
 
 class CLIPEncoderLayer(torch.nn.Module):
     def __init__(self, embed_dim, intermediate_size, num_heads=12, head_dim=64, use_quick_gelu=True):
         super().__init__()
-        self.attn = Attention(q_dim=embed_dim, num_heads=num_heads, head_dim=head_dim, bias_q=True, bias_kv=True, bias_out=True)
+        self.attn = Attention(
+            q_dim=embed_dim, num_heads=num_heads, head_dim=head_dim, bias_q=True, bias_kv=True, bias_out=True
+        )
         self.layer_norm1 = torch.nn.LayerNorm(embed_dim)
         self.layer_norm2 = torch.nn.LayerNorm(embed_dim)
         self.fc1 = torch.nn.Linear(embed_dim, intermediate_size)
@@ -392,12 +420,22 @@ class CLIPEncoderLayer(torch.nn.Module):
 
         return hidden_states
 
+
 class SDTextEncoder(torch.nn.Module):
-    def __init__(self, embed_dim=768, vocab_size=49408, max_position_embeddings=77, num_encoder_layers=12, encoder_intermediate_size=3072):
+    def __init__(
+        self,
+        embed_dim=768,
+        vocab_size=49408,
+        max_position_embeddings=77,
+        num_encoder_layers=12,
+        encoder_intermediate_size=3072,
+    ):
         super().__init__()
         self.token_embedding = torch.nn.Embedding(vocab_size, embed_dim)
         self.position_embeds = torch.nn.Parameter(torch.zeros(1, max_position_embeddings, embed_dim))
-        self.encoders = torch.nn.ModuleList([CLIPEncoderLayer(embed_dim, encoder_intermediate_size) for _ in range(num_encoder_layers)])
+        self.encoders = torch.nn.ModuleList(
+            [CLIPEncoderLayer(embed_dim, encoder_intermediate_size) for _ in range(num_encoder_layers)]
+        )
         self.attn_mask = self.attention_mask(max_position_embeddings)
         self.final_layer_norm = torch.nn.LayerNorm(embed_dim)
 
@@ -417,6 +455,7 @@ class SDTextEncoder(torch.nn.Module):
         embeds = self.final_layer_norm(embeds)
         return embeds
 
+
 class SD3TextEncoder1(SDTextEncoder):
     def __init__(self, vocab_size=49408):
         super().__init__(vocab_size=vocab_size)
@@ -426,7 +465,7 @@ class SD3TextEncoder1(SDTextEncoder):
         embeds = embeds + self.position_embeds.to(dtype=embeds.dtype, device=input_ids.device)
         attn_mask = self.attn_mask.to(device=embeds.device, dtype=embeds.dtype)
         if extra_mask is not None:
-            attn_mask[:, extra_mask[0]==0] = float("-inf")
+            attn_mask[:, extra_mask[0] == 0] = float("-inf")
         for encoder_id, encoder in enumerate(self.encoders):
             embeds = encoder(embeds, attn_mask=attn_mask)
             if encoder_id + clip_skip == len(self.encoders):
@@ -435,34 +474,37 @@ class SD3TextEncoder1(SDTextEncoder):
         pooled_embeds = embeds[torch.arange(embeds.shape[0]), input_ids.to(dtype=torch.int).argmax(dim=-1)]
         return pooled_embeds, hidden_states
 
+
 class SD3VAEEncoder(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.scaling_factor = 1.5305 # Different from SD 1.x
-        self.shift_factor = 0.0609 # Different from SD 1.x
+        self.scaling_factor = 1.5305  # Different from SD 1.x
+        self.shift_factor = 0.0609  # Different from SD 1.x
         self.conv_in = torch.nn.Conv2d(3, 128, kernel_size=3, padding=1)
 
-        self.blocks = torch.nn.ModuleList([
-            # DownEncoderBlock2D
-            ResnetBlock(128, 128, eps=1e-6),
-            ResnetBlock(128, 128, eps=1e-6),
-            DownSampler(128, padding=0, extra_padding=True),
-            # DownEncoderBlock2D
-            ResnetBlock(128, 256, eps=1e-6),
-            ResnetBlock(256, 256, eps=1e-6),
-            DownSampler(256, padding=0, extra_padding=True),
-            # DownEncoderBlock2D
-            ResnetBlock(256, 512, eps=1e-6),
-            ResnetBlock(512, 512, eps=1e-6),
-            DownSampler(512, padding=0, extra_padding=True),
-            # DownEncoderBlock2D
-            ResnetBlock(512, 512, eps=1e-6),
-            ResnetBlock(512, 512, eps=1e-6),
-            # UNetMidBlock2D
-            ResnetBlock(512, 512, eps=1e-6),
-            VAEAttentionBlock(1, 512, 512, 1, eps=1e-6),
-            ResnetBlock(512, 512, eps=1e-6),
-        ])
+        self.blocks = torch.nn.ModuleList(
+            [
+                # DownEncoderBlock2D
+                ResnetBlock(128, 128, eps=1e-6),
+                ResnetBlock(128, 128, eps=1e-6),
+                DownSampler(128, padding=0, extra_padding=True),
+                # DownEncoderBlock2D
+                ResnetBlock(128, 256, eps=1e-6),
+                ResnetBlock(256, 256, eps=1e-6),
+                DownSampler(256, padding=0, extra_padding=True),
+                # DownEncoderBlock2D
+                ResnetBlock(256, 512, eps=1e-6),
+                ResnetBlock(512, 512, eps=1e-6),
+                DownSampler(512, padding=0, extra_padding=True),
+                # DownEncoderBlock2D
+                ResnetBlock(512, 512, eps=1e-6),
+                ResnetBlock(512, 512, eps=1e-6),
+                # UNetMidBlock2D
+                ResnetBlock(512, 512, eps=1e-6),
+                VAEAttentionBlock(1, 512, 512, 1, eps=1e-6),
+                ResnetBlock(512, 512, eps=1e-6),
+            ]
+        )
 
         self.conv_norm_out = torch.nn.GroupNorm(num_channels=512, num_groups=32, eps=1e-6)
         self.conv_act = torch.nn.SiLU()
@@ -475,7 +517,7 @@ class SD3VAEEncoder(torch.nn.Module):
             tile_size,
             tile_stride,
             tile_device=sample.device,
-            tile_dtype=sample.dtype
+            tile_dtype=sample.dtype,
         )
         return hidden_states
 
@@ -508,9 +550,8 @@ class SD3VAEEncoder(torch.nn.Module):
         hidden_states = []
 
         for i in range(0, sample.shape[2], batch_size):
-
             j = min(i + batch_size, sample.shape[2])
-            sample_batch = rearrange(sample[:,:,i:j], "B C T H W -> (B T) C H W")
+            sample_batch = rearrange(sample[:, :, i:j], "B C T H W -> (B T) C H W")
 
             hidden_states_batch = self(sample_batch)
             hidden_states_batch = rearrange(hidden_states_batch, "(B T) C H W -> B C T H W", B=B)
@@ -524,6 +565,7 @@ class SD3VAEEncoder(torch.nn.Module):
     def state_dict_converter():
         return SDVAEEncoderStateDictConverter()
 
+
 class ResnetBlock(torch.nn.Module):
     def __init__(self, in_channels, out_channels, temb_channels=None, groups=32, eps=1e-5):
         super().__init__()
@@ -536,7 +578,9 @@ class ResnetBlock(torch.nn.Module):
         self.nonlinearity = torch.nn.SiLU()
         self.conv_shortcut = None
         if in_channels != out_channels:
-            self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=True)
+            self.conv_shortcut = torch.nn.Conv2d(
+                in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=True
+            )
 
     def forward(self, hidden_states, time_emb, text_emb, res_stack, **kwargs):
         x = hidden_states
@@ -555,6 +599,7 @@ class ResnetBlock(torch.nn.Module):
         hidden_states = hidden_states + x
         return hidden_states, time_emb, text_emb, res_stack
 
+
 class DownSampler(torch.nn.Module):
     def __init__(self, channels, padding=1, extra_padding=False):
         super().__init__()
@@ -567,25 +612,22 @@ class DownSampler(torch.nn.Module):
         hidden_states = self.conv(hidden_states)
         return hidden_states, time_emb, text_emb, res_stack
 
-class VAEAttentionBlock(torch.nn.Module):
 
-    def __init__(self, num_attention_heads, attention_head_dim, in_channels, num_layers=1, norm_num_groups=32, eps=1e-5):
+class VAEAttentionBlock(torch.nn.Module):
+    def __init__(
+        self, num_attention_heads, attention_head_dim, in_channels, num_layers=1, norm_num_groups=32, eps=1e-5
+    ):
         super().__init__()
         inner_dim = num_attention_heads * attention_head_dim
 
         self.norm = torch.nn.GroupNorm(num_groups=norm_num_groups, num_channels=in_channels, eps=eps, affine=True)
 
-        self.transformer_blocks = torch.nn.ModuleList([
-            Attention(
-                inner_dim,
-                num_attention_heads,
-                attention_head_dim,
-                bias_q=True,
-                bias_kv=True,
-                bias_out=True
-            )
-            for d in range(num_layers)
-        ])
+        self.transformer_blocks = torch.nn.ModuleList(
+            [
+                Attention(inner_dim, num_attention_heads, attention_head_dim, bias_q=True, bias_kv=True, bias_out=True)
+                for d in range(num_layers)
+            ]
+        )
 
     def forward(self, hidden_states, time_emb, text_emb, res_stack):
         batch, _, height, width = hidden_states.shape
@@ -603,6 +645,7 @@ class VAEAttentionBlock(torch.nn.Module):
 
         return hidden_states, time_emb, text_emb, res_stack
 
+
 class FluxVAEEncoder(SD3VAEEncoder):
     def __init__(self):
         super().__init__()
@@ -613,6 +656,7 @@ class FluxVAEEncoder(SD3VAEEncoder):
     def state_dict_converter():
         return FluxVAEEncoderStateDictConverter()
 
+
 class SDVAEEncoderStateDictConverter:
     def __init__(self):
         pass
@@ -620,11 +664,20 @@ class SDVAEEncoderStateDictConverter:
     def from_diffusers(self, state_dict):
         # architecture
         block_types = [
-            'ResnetBlock', 'ResnetBlock', 'DownSampler',
-            'ResnetBlock', 'ResnetBlock', 'DownSampler',
-            'ResnetBlock', 'ResnetBlock', 'DownSampler',
-            'ResnetBlock', 'ResnetBlock',
-            'ResnetBlock', 'VAEAttentionBlock', 'ResnetBlock'
+            "ResnetBlock",
+            "ResnetBlock",
+            "DownSampler",
+            "ResnetBlock",
+            "ResnetBlock",
+            "DownSampler",
+            "ResnetBlock",
+            "ResnetBlock",
+            "DownSampler",
+            "ResnetBlock",
+            "ResnetBlock",
+            "ResnetBlock",
+            "VAEAttentionBlock",
+            "ResnetBlock",
         ]
 
         # Rename each parameter
@@ -647,7 +700,7 @@ class SDVAEEncoderStateDictConverter:
             "encoder.conv_norm_out": "conv_norm_out",
             "encoder.conv_out": "conv_out",
         }
-        name_list = sorted([name for name in state_dict])
+        name_list = sorted(state_dict)
         rename_dict = {}
         block_id = {"ResnetBlock": -1, "DownSampler": -1, "UpSampler": -1}
         last_block_type_with_id = {"ResnetBlock": "", "DownSampler": "", "UpSampler": ""}
@@ -657,7 +710,9 @@ class SDVAEEncoderStateDictConverter:
             if name_prefix in local_rename_dict:
                 rename_dict[name] = local_rename_dict[name_prefix] + "." + names[-1]
             elif name.startswith("encoder.down_blocks"):
-                block_type = {"resnets": "ResnetBlock", "downsamplers": "DownSampler", "upsamplers": "UpSampler"}[names[3]]
+                block_type = {"resnets": "ResnetBlock", "downsamplers": "DownSampler", "upsamplers": "UpSampler"}[
+                    names[3]
+                ]
                 block_type_with_id = ".".join(names[:5])
                 if block_type_with_id != last_block_type_with_id[block_type]:
                     block_id[block_type] += 1
@@ -795,6 +850,7 @@ class SDVAEEncoderStateDictConverter:
                 state_dict_[rename_dict[name]] = param
         return state_dict_
 
+
 class FluxVAEEncoderStateDictConverter(SDVAEEncoderStateDictConverter):
     def __init__(self):
         pass
@@ -917,6 +973,7 @@ class FluxVAEEncoderStateDictConverter(SDVAEEncoderStateDictConverter):
                 state_dict_[rename_dict[name]] = param
         return state_dict_
 
+
 class FluxDiTStateDictConverter:
     def __init__(self):
         pass
@@ -969,7 +1026,7 @@ class FluxDiTStateDictConverter:
         for name, param in state_dict.items():
             if name.endswith(".weight") or name.endswith(".bias"):
                 suffix = ".weight" if name.endswith(".weight") else ".bias"
-                prefix = name[:-len(suffix)]
+                prefix = name[: -len(suffix)]
                 if prefix in global_rename_dict:
                     state_dict_[global_rename_dict[prefix] + suffix] = param
                 elif prefix.startswith("transformer_blocks."):
@@ -994,28 +1051,34 @@ class FluxDiTStateDictConverter:
             if "single_blocks." in name and ".a_to_q." in name:
                 mlp = state_dict_.get(name.replace(".a_to_q.", ".proj_in_besides_attn."), None)
                 if mlp is None:
-                    mlp = torch.zeros(4 * state_dict_[name].shape[0],
-                                      *state_dict_[name].shape[1:],
-                                      dtype=state_dict_[name].dtype)
+                    mlp = torch.zeros(
+                        4 * state_dict_[name].shape[0], *state_dict_[name].shape[1:], dtype=state_dict_[name].dtype
+                    )
                 else:
                     state_dict_.pop(name.replace(".a_to_q.", ".proj_in_besides_attn."))
-                param = torch.concat([
-                    state_dict_.pop(name),
-                    state_dict_.pop(name.replace(".a_to_q.", ".a_to_k.")),
-                    state_dict_.pop(name.replace(".a_to_q.", ".a_to_v.")),
-                    mlp,
-                ], dim=0)
+                param = torch.concat(
+                    [
+                        state_dict_.pop(name),
+                        state_dict_.pop(name.replace(".a_to_q.", ".a_to_k.")),
+                        state_dict_.pop(name.replace(".a_to_q.", ".a_to_v.")),
+                        mlp,
+                    ],
+                    dim=0,
+                )
                 name_ = name.replace(".a_to_q.", ".to_qkv_mlp.")
                 state_dict_[name_] = param
         for name in list(state_dict_.keys()):
             for component in ["a", "b"]:
                 if f".{component}_to_q." in name:
                     name_ = name.replace(f".{component}_to_q.", f".{component}_to_qkv.")
-                    param = torch.concat([
-                        state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_q.")],
-                        state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_k.")],
-                        state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_v.")],
-                    ], dim=0)
+                    param = torch.concat(
+                        [
+                            state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_q.")],
+                            state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_k.")],
+                            state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_v.")],
+                        ],
+                        dim=0,
+                    )
                     state_dict_[name_] = param
                     state_dict_.pop(name.replace(f".{component}_to_q.", f".{component}_to_q."))
                     state_dict_.pop(name.replace(f".{component}_to_q.", f".{component}_to_k."))
@@ -1070,7 +1133,6 @@ class FluxDiTStateDictConverter:
             "txt_mlp.2.weight": "ff_b.2.weight",
             "txt_mod.lin.bias": "norm1_b.linear.bias",
             "txt_mod.lin.weight": "norm1_b.linear.weight",
-
             "linear1.bias": "to_qkv_mlp.bias",
             "linear1.weight": "to_qkv_mlp.weight",
             "linear2.bias": "proj_out.bias",
@@ -1083,7 +1145,7 @@ class FluxDiTStateDictConverter:
         state_dict_ = {}
         for name, param in state_dict.items():
             if name.startswith("model.diffusion_model."):
-                name = name[len("model.diffusion_model."):]
+                name = name[len("model.diffusion_model.") :]
             names = name.split(".")
             if name in rename_dict:
                 rename = rename_dict[name]
