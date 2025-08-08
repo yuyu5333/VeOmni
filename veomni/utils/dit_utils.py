@@ -70,20 +70,6 @@ def _compute_wan_seqlens(
     seqlens = B * T_out * H_out * W_out
     return [seqlens]
 
-def _compute_flux_seqlens(
-    micro_batch: Dict[str, "torch.Tensor"]
-) -> Tuple[List[int], Optional[List[int]]]:
-    """
-    Computes the sequence lengths of the current batch.
-
-    Args:
-        micro_batch (Dict[str, Tensor]): The current batch.
-    """
-    B, C, H, W = micro_batch.shape
-    H_out = int((H - 2) / 2 + 1)
-    W_out = int((W - 2) / 2 + 1)
-    seqlens = B * H_out * W_out
-    return [seqlens]
 
 def _compute_flux_seqlens(micro_batch: Dict[str, "torch.Tensor"]) -> Tuple[List[int], Optional[List[int]]]:
     """
@@ -98,6 +84,22 @@ def _compute_flux_seqlens(micro_batch: Dict[str, "torch.Tensor"]) -> Tuple[List[
     seqlens = B * H_out * W_out
     return [seqlens]
 
+<<<<<<< HEAD
+def _compute_flux_seqlens(micro_batch: Dict[str, "torch.Tensor"]) -> Tuple[List[int], Optional[List[int]]]:
+    """
+    Computes the sequence lengths of the current batch.
+
+    Args:
+        micro_batch (Dict[str, Tensor]): The current batch.
+    """
+    B, C, H, W = micro_batch.shape
+    H_out = int((H - 2) / 2 + 1)
+    W_out = int((W - 2) / 2 + 1)
+    seqlens = B * H_out * W_out
+    return [seqlens]
+
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
 
 class EnvironMeter(OriginalEnvironMeter):
     """
@@ -122,10 +124,14 @@ class EnvironMeter(OriginalEnvironMeter):
             seqlens = _compute_wan_seqlens(micro_batch, self.rmpad, self.rmpad_with_pos_ids)
         elif model_type == "flux":
 <<<<<<< HEAD
+<<<<<<< HEAD
             seqlens = _compute_flux_seqlens(micro_batch)
 =======
             seqlens =  _compute_flux_seqlens(micro_batch)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            seqlens = _compute_flux_seqlens(micro_batch)
+>>>>>>> 19838ac ([model] fix: format flux code)
         else:
             raise ValueError(f"model_type {model_type} not supported")
 

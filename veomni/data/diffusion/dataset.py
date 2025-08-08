@@ -27,7 +27,9 @@ from veomni.utils import logging
 =======
 >>>>>>> 48040b0 ([model] fix: format flux code)
 
+
 logger = logging.get_logger(__name__)
+
 
 class TensorDataset(torch.utils.data.Dataset):
     def __init__(self, base_path, metadata_path, datasets_repeat=1):
@@ -49,8 +51,18 @@ class TensorDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.path) * self.datasets_repeat
 
+
 class Text2ImageDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_path, metadata_path, height=1024, width=1024, center_crop=True, random_flip=False, datasets_repeat=1):
+    def __init__(
+        self,
+        dataset_path,
+        metadata_path,
+        height=1024,
+        width=1024,
+        center_crop=True,
+        random_flip=False,
+        datasets_repeat=1,
+    ):
         metadata = pd.read_csv(metadata_path)
         self.path = [os.path.join(dataset_path, "train", file_name) for file_name in metadata["file_name"]]
         self.text = metadata["text"].to_list()
@@ -70,20 +82,23 @@ class Text2ImageDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         data_id = torch.randint(0, len(self.path), (1,))[0]
-        data_id = (data_id + index) % len(self.path) # For fixed seed.
+        data_id = (data_id + index) % len(self.path)  # For fixed seed.
         text = self.text[data_id]
         image = Image.open(self.path[data_id]).convert("RGB")
         target_height, target_width = self.height, self.width
         width, height = image.size
         scale = max(target_width / width, target_height / height)
-        shape = [round(height*scale),round(width*scale)]
-        image = torchvision.transforms.functional.resize(image,shape,interpolation=transforms.InterpolationMode.BILINEAR)
+        shape = [round(height * scale), round(width * scale)]
+        image = torchvision.transforms.functional.resize(
+            image, shape, interpolation=transforms.InterpolationMode.BILINEAR
+        )
         image = self.image_processor(image)
         return [{"text": text, "image": image}]
 
     def __len__(self):
         return len(self.path) * self.datasets_repeat
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 
 class Text2ImageDataset(torch.utils.data.Dataset):
@@ -142,5 +157,12 @@ def build_tensor_dataset(base_path, metadata_path, datasets_repeat=1):
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+def build_tensor_dataset(base_path, metadata_path, datasets_repeat=1):
+    return TensorDataset(base_path, metadata_path, datasets_repeat)
+
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 def build_text_image_dataset(base_path, metadata_path, height, width, center_crop, random_flip, datasets_repeat=1):
     return Text2ImageDataset(base_path, metadata_path, height, width, center_crop, random_flip, datasets_repeat)

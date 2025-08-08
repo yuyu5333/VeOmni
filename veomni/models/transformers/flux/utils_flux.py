@@ -44,13 +44,19 @@ def get_timestep_embedding(
     half_dim = embedding_dim // 2
     exponent = -math.log(max_period) * torch.arange(
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
         start=0,
         end=half_dim,
         dtype=torch.float32,
         device=timesteps.device if computation_device is None else computation_device,
+<<<<<<< HEAD
 =======
         start=0, end=half_dim, dtype=torch.float32, device=timesteps.device if computation_device is None else computation_device
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     )
     exponent = exponent / (half_dim - downscale_freq_shift)
 
@@ -77,12 +83,18 @@ class TimestepEmbeddings(torch.nn.Module):
     def __init__(self, dim_in, dim_out, computation_device=None):
         super().__init__()
 <<<<<<< HEAD
+<<<<<<< HEAD
         self.time_proj = TemporalTimesteps(
             num_channels=dim_in, flip_sin_to_cos=True, downscale_freq_shift=0, computation_device=computation_device
         )
 =======
         self.time_proj = TemporalTimesteps(num_channels=dim_in, flip_sin_to_cos=True, downscale_freq_shift=0, computation_device=computation_device)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        self.time_proj = TemporalTimesteps(
+            num_channels=dim_in, flip_sin_to_cos=True, downscale_freq_shift=0, computation_device=computation_device
+        )
+>>>>>>> 19838ac ([model] fix: format flux code)
         self.timestep_embedder = torch.nn.Sequential(
             torch.nn.Linear(dim_in, dim_out), torch.nn.SiLU(), torch.nn.Linear(dim_out, dim_out)
         )
@@ -93,6 +105,7 @@ class TimestepEmbeddings(torch.nn.Module):
         return time_emb
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 class TemporalTimesteps(torch.nn.Module):
     def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float, computation_device=None):
@@ -100,6 +113,11 @@ class TemporalTimesteps(torch.nn.Module):
 class TemporalTimesteps(torch.nn.Module):
     def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float, computation_device = None):
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+class TemporalTimesteps(torch.nn.Module):
+    def __init__(self, num_channels: int, flip_sin_to_cos: bool, downscale_freq_shift: float, computation_device=None):
+>>>>>>> 19838ac ([model] fix: format flux code)
         super().__init__()
         self.num_channels = num_channels
         self.flip_sin_to_cos = flip_sin_to_cos
@@ -117,17 +135,24 @@ class TemporalTimesteps(torch.nn.Module):
         return t_emb
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class TileWorker:
     def __init__(self):
         pass
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     def mask(self, height, width, border_width):
         # Create a mask with shape (height, width).
         # The centre area is filled with 1, and the border line is filled with values in range (0, 1].
@@ -138,13 +163,17 @@ class TileWorker:
         return mask
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     def tile(self, model_input, tile_size, tile_stride, tile_device, tile_dtype):
         # Convert a tensor (b, c, h, w) to (b, c, tile_size, tile_size, tile_num)
         batch_size, channel, _, _ = model_input.shape
         model_input = model_input.to(device=tile_device, dtype=tile_dtype)
+<<<<<<< HEAD
 <<<<<<< HEAD
         unfold_operator = torch.nn.Unfold(kernel_size=(tile_size, tile_size), stride=(tile_stride, tile_stride))
 =======
@@ -153,11 +182,15 @@ class TileWorker:
             stride=(tile_stride, tile_stride)
         )
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        unfold_operator = torch.nn.Unfold(kernel_size=(tile_size, tile_size), stride=(tile_stride, tile_stride))
+>>>>>>> 19838ac ([model] fix: format flux code)
         model_input = unfold_operator(model_input)
         model_input = model_input.view((batch_size, channel, tile_size, tile_size, -1))
 
         return model_input
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     def tiled_inference(
         self, forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype
@@ -166,11 +199,17 @@ class TileWorker:
 
     def tiled_inference(self, forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype):
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+    def tiled_inference(
+        self, forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype
+    ):
+>>>>>>> 19838ac ([model] fix: format flux code)
         # Call y=forward_fn(x) for each tile
         tile_num = model_input.shape[-1]
         model_output_stack = []
 
         for tile_id in range(0, tile_num, tile_batch_size):
+<<<<<<< HEAD
 <<<<<<< HEAD
             # process input
             tile_id_ = min(tile_id + tile_batch_size, tile_num)
@@ -181,16 +220,25 @@ class TileWorker:
             tile_id_ = min(tile_id + tile_batch_size, tile_num)
             x = model_input[:, :, :, :, tile_id: tile_id_]
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            # process input
+            tile_id_ = min(tile_id + tile_batch_size, tile_num)
+            x = model_input[:, :, :, :, tile_id:tile_id_]
+>>>>>>> 19838ac ([model] fix: format flux code)
             x = x.to(device=inference_device, dtype=inference_dtype)
             x = rearrange(x, "b c h w n -> (n b) c h w")
 
             # process output
             y = forward_fn(x)
 <<<<<<< HEAD
+<<<<<<< HEAD
             y = rearrange(y, "(n b) c h w -> b c h w n", n=tile_id_ - tile_id)
 =======
             y = rearrange(y, "(n b) c h w -> b c h w n", n=tile_id_-tile_id)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            y = rearrange(y, "(n b) c h w -> b c h w n", n=tile_id_ - tile_id)
+>>>>>>> 19838ac ([model] fix: format flux code)
             y = y.to(device=tile_device, dtype=tile_dtype)
             model_output_stack.append(y)
 
@@ -198,9 +246,12 @@ class TileWorker:
         return model_output
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     def io_scale(self, model_output, tile_size):
         # Determine the size modification happened in forward_fn
         # We only consider the same scale on height and width.
@@ -208,9 +259,12 @@ class TileWorker:
         return io_scale
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     def untile(self, model_output, height, width, tile_size, tile_stride, border_width, tile_device, tile_dtype):
         # The reversed function of tile
         mask = self.mask(tile_size, tile_size, border_width)
@@ -220,12 +274,16 @@ class TileWorker:
 
         fold_operator = torch.nn.Fold(
 <<<<<<< HEAD
+<<<<<<< HEAD
             output_size=(height, width), kernel_size=(tile_size, tile_size), stride=(tile_stride, tile_stride)
 =======
             output_size=(height, width),
             kernel_size=(tile_size, tile_size),
             stride=(tile_stride, tile_stride)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            output_size=(height, width), kernel_size=(tile_size, tile_size), stride=(tile_stride, tile_stride)
+>>>>>>> 19838ac ([model] fix: format flux code)
         )
         mask = repeat(mask[0, 0, :, :, 0], "h w -> 1 (h w) n", n=model_output.shape[-1])
         model_output = rearrange(model_output, "b c h w n -> b (c h w) n")
@@ -234,6 +292,9 @@ class TileWorker:
         return model_output
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     def tiled_forward(
         self,
         forward_fn,
@@ -245,6 +306,7 @@ class TileWorker:
         tile_dtype=torch.float32,
         border_width=None,
     ):
+<<<<<<< HEAD
         # Prepare
         inference_device, inference_dtype = model_input.device, model_input.dtype
         height, width = model_input.shape[2], model_input.shape[3]
@@ -257,11 +319,18 @@ class TileWorker:
         height, width = model_input.shape[2], model_input.shape[3]
         border_width = int(tile_stride*0.5) if border_width is None else border_width
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        # Prepare
+        inference_device, inference_dtype = model_input.device, model_input.dtype
+        height, width = model_input.shape[2], model_input.shape[3]
+        border_width = int(tile_stride * 0.5) if border_width is None else border_width
+>>>>>>> 19838ac ([model] fix: format flux code)
 
         # tile
         model_input = self.tile(model_input, tile_size, tile_stride, tile_device, tile_dtype)
 
         # inference
+<<<<<<< HEAD
 <<<<<<< HEAD
         model_output = self.tiled_inference(
             forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype
@@ -279,21 +348,33 @@ class TileWorker:
         )
 =======
         model_output = self.tiled_inference(forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype)
+=======
+        model_output = self.tiled_inference(
+            forward_fn, model_input, tile_batch_size, inference_device, inference_dtype, tile_device, tile_dtype
+        )
+>>>>>>> 19838ac ([model] fix: format flux code)
 
         # resize
         io_scale = self.io_scale(model_output, tile_size)
-        height, width = int(height*io_scale), int(width*io_scale)
-        tile_size, tile_stride = int(tile_size*io_scale), int(tile_stride*io_scale)
-        border_width = int(border_width*io_scale)
+        height, width = int(height * io_scale), int(width * io_scale)
+        tile_size, tile_stride = int(tile_size * io_scale), int(tile_stride * io_scale)
+        border_width = int(border_width * io_scale)
 
         # untile
+<<<<<<< HEAD
         model_output = self.untile(model_output, height, width, tile_size, tile_stride, border_width, tile_device, tile_dtype)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        model_output = self.untile(
+            model_output, height, width, tile_size, tile_stride, border_width, tile_device, tile_dtype
+        )
+>>>>>>> 19838ac ([model] fix: format flux code)
 
         # Done!
         model_output = model_output.to(device=inference_device, dtype=inference_dtype)
         return model_output
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 
 @contextmanager
@@ -303,6 +384,11 @@ def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = 
 def init_weights_on_device(device = torch.device("meta"), include_buffers :bool = False):
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+@contextmanager
+def init_weights_on_device(device=torch.device("meta"), include_buffers: bool = False):
+>>>>>>> 19838ac ([model] fix: format flux code)
     old_register_parameter = torch.nn.Module.register_parameter
     if include_buffers:
         old_register_buffer = torch.nn.Module.register_buffer
@@ -350,9 +436,13 @@ def init_weights_on_device(device = torch.device("meta"), include_buffers :bool 
             setattr(torch, torch_function_name, old_torch_function)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 def low_version_attention(query, key, value, attn_bias=None):
     scale = 1 / query.shape[-1] ** 0.5
     query = query * scale
@@ -363,9 +453,13 @@ def low_version_attention(query, key, value, attn_bias=None):
     return attn @ value
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class FluxTextEncoder2(T5EncoderModel):
     def __init__(self, config):
         super().__init__(config)
@@ -381,11 +475,16 @@ class FluxTextEncoder2(T5EncoderModel):
         return FluxTextEncoder2StateDictConverter()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 class FluxTextEncoder2StateDictConverter:
 =======
 class FluxTextEncoder2StateDictConverter():
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+class FluxTextEncoder2StateDictConverter:
+>>>>>>> 19838ac ([model] fix: format flux code)
     def __init__(self):
         pass
 
@@ -397,12 +496,17 @@ class FluxTextEncoder2StateDictConverter():
         return self.from_diffusers(state_dict)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 class Attention(torch.nn.Module):
 =======
 class Attention(torch.nn.Module):
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+class Attention(torch.nn.Module):
+>>>>>>> 19838ac ([model] fix: format flux code)
     def __init__(self, q_dim, num_heads, head_dim, kv_dim=None, bias_q=False, bias_kv=False, bias_out=False):
         super().__init__()
         dim_inner = head_dim * num_heads
@@ -424,12 +528,18 @@ class Attention(torch.nn.Module):
         return hidden_states
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     def torch_forward(
         self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None
     ):
 =======
     def torch_forward(self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None):
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+    def torch_forward(
+        self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None
+    ):
+>>>>>>> 19838ac ([model] fix: format flux code)
         if encoder_hidden_states is None:
             encoder_hidden_states = hidden_states
 
@@ -473,9 +583,13 @@ class Attention(torch.nn.Module):
         else:
             import xformers.ops as xops
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
             hidden_states = xops.memory_efficient_attention(q, k, v)
         hidden_states = rearrange(hidden_states, "(b n) f d -> b f (n d)", n=self.num_heads)
 
@@ -485,6 +599,9 @@ class Attention(torch.nn.Module):
         return hidden_states
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
     def forward(
         self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None
     ):
@@ -496,14 +613,18 @@ class Attention(torch.nn.Module):
             qkv_preprocessor=qkv_preprocessor,
         )
 
+<<<<<<< HEAD
 =======
     def forward(self, hidden_states, encoder_hidden_states=None, attn_mask=None, ipadapter_kwargs=None, qkv_preprocessor=None):
         return self.torch_forward(hidden_states, encoder_hidden_states=encoder_hidden_states, attn_mask=attn_mask, ipadapter_kwargs=ipadapter_kwargs, qkv_preprocessor=qkv_preprocessor)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
 
 class CLIPEncoderLayer(torch.nn.Module):
     def __init__(self, embed_dim, intermediate_size, num_heads=12, head_dim=64, use_quick_gelu=True):
         super().__init__()
+<<<<<<< HEAD
 <<<<<<< HEAD
         self.attn = Attention(
             q_dim=embed_dim, num_heads=num_heads, head_dim=head_dim, bias_q=True, bias_kv=True, bias_out=True
@@ -511,6 +632,11 @@ class CLIPEncoderLayer(torch.nn.Module):
 =======
         self.attn = Attention(q_dim=embed_dim, num_heads=num_heads, head_dim=head_dim, bias_q=True, bias_kv=True, bias_out=True)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        self.attn = Attention(
+            q_dim=embed_dim, num_heads=num_heads, head_dim=head_dim, bias_q=True, bias_kv=True, bias_out=True
+        )
+>>>>>>> 19838ac ([model] fix: format flux code)
         self.layer_norm1 = torch.nn.LayerNorm(embed_dim)
         self.layer_norm2 = torch.nn.LayerNorm(embed_dim)
         self.fc1 = torch.nn.Linear(embed_dim, intermediate_size)
@@ -541,6 +667,7 @@ class CLIPEncoderLayer(torch.nn.Module):
         return hidden_states
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 class SDTextEncoder(torch.nn.Module):
     def __init__(
@@ -558,13 +685,29 @@ class SDTextEncoder(torch.nn.Module):
             [CLIPEncoderLayer(embed_dim, encoder_intermediate_size) for _ in range(num_encoder_layers)]
         )
 =======
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class SDTextEncoder(torch.nn.Module):
-    def __init__(self, embed_dim=768, vocab_size=49408, max_position_embeddings=77, num_encoder_layers=12, encoder_intermediate_size=3072):
+    def __init__(
+        self,
+        embed_dim=768,
+        vocab_size=49408,
+        max_position_embeddings=77,
+        num_encoder_layers=12,
+        encoder_intermediate_size=3072,
+    ):
         super().__init__()
         self.token_embedding = torch.nn.Embedding(vocab_size, embed_dim)
         self.position_embeds = torch.nn.Parameter(torch.zeros(1, max_position_embeddings, embed_dim))
+<<<<<<< HEAD
         self.encoders = torch.nn.ModuleList([CLIPEncoderLayer(embed_dim, encoder_intermediate_size) for _ in range(num_encoder_layers)])
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        self.encoders = torch.nn.ModuleList(
+            [CLIPEncoderLayer(embed_dim, encoder_intermediate_size) for _ in range(num_encoder_layers)]
+        )
+>>>>>>> 19838ac ([model] fix: format flux code)
         self.attn_mask = self.attention_mask(max_position_embeddings)
         self.final_layer_norm = torch.nn.LayerNorm(embed_dim)
 
@@ -585,9 +728,13 @@ class SDTextEncoder(torch.nn.Module):
         return embeds
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class SD3TextEncoder1(SDTextEncoder):
     def __init__(self, vocab_size=49408):
         super().__init__(vocab_size=vocab_size)
@@ -598,10 +745,14 @@ class SD3TextEncoder1(SDTextEncoder):
         attn_mask = self.attn_mask.to(device=embeds.device, dtype=embeds.dtype)
         if extra_mask is not None:
 <<<<<<< HEAD
+<<<<<<< HEAD
             attn_mask[:, extra_mask[0] == 0] = float("-inf")
 =======
             attn_mask[:, extra_mask[0]==0] = float("-inf")
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            attn_mask[:, extra_mask[0] == 0] = float("-inf")
+>>>>>>> 19838ac ([model] fix: format flux code)
         for encoder_id, encoder in enumerate(self.encoders):
             embeds = encoder(embeds, attn_mask=attn_mask)
             if encoder_id + clip_skip == len(self.encoders):
@@ -610,6 +761,7 @@ class SD3TextEncoder1(SDTextEncoder):
         pooled_embeds = embeds[torch.arange(embeds.shape[0]), input_ids.to(dtype=torch.int).argmax(dim=-1)]
         return pooled_embeds, hidden_states
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 
 class SD3VAEEncoder(torch.nn.Module):
@@ -643,13 +795,17 @@ class SD3VAEEncoder(torch.nn.Module):
             ]
         )
 =======
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class SD3VAEEncoder(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.scaling_factor = 1.5305 # Different from SD 1.x
-        self.shift_factor = 0.0609 # Different from SD 1.x
+        self.scaling_factor = 1.5305  # Different from SD 1.x
+        self.shift_factor = 0.0609  # Different from SD 1.x
         self.conv_in = torch.nn.Conv2d(3, 128, kernel_size=3, padding=1)
 
+<<<<<<< HEAD
         self.blocks = torch.nn.ModuleList([
             # DownEncoderBlock2D
             ResnetBlock(128, 128, eps=1e-6),
@@ -672,6 +828,31 @@ class SD3VAEEncoder(torch.nn.Module):
             ResnetBlock(512, 512, eps=1e-6),
         ])
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+        self.blocks = torch.nn.ModuleList(
+            [
+                # DownEncoderBlock2D
+                ResnetBlock(128, 128, eps=1e-6),
+                ResnetBlock(128, 128, eps=1e-6),
+                DownSampler(128, padding=0, extra_padding=True),
+                # DownEncoderBlock2D
+                ResnetBlock(128, 256, eps=1e-6),
+                ResnetBlock(256, 256, eps=1e-6),
+                DownSampler(256, padding=0, extra_padding=True),
+                # DownEncoderBlock2D
+                ResnetBlock(256, 512, eps=1e-6),
+                ResnetBlock(512, 512, eps=1e-6),
+                DownSampler(512, padding=0, extra_padding=True),
+                # DownEncoderBlock2D
+                ResnetBlock(512, 512, eps=1e-6),
+                ResnetBlock(512, 512, eps=1e-6),
+                # UNetMidBlock2D
+                ResnetBlock(512, 512, eps=1e-6),
+                VAEAttentionBlock(1, 512, 512, 1, eps=1e-6),
+                ResnetBlock(512, 512, eps=1e-6),
+            ]
+        )
+>>>>>>> 19838ac ([model] fix: format flux code)
 
         self.conv_norm_out = torch.nn.GroupNorm(num_channels=512, num_groups=32, eps=1e-6)
         self.conv_act = torch.nn.SiLU()
@@ -685,10 +866,14 @@ class SD3VAEEncoder(torch.nn.Module):
             tile_stride,
             tile_device=sample.device,
 <<<<<<< HEAD
+<<<<<<< HEAD
             tile_dtype=sample.dtype,
 =======
             tile_dtype=sample.dtype
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            tile_dtype=sample.dtype,
+>>>>>>> 19838ac ([model] fix: format flux code)
         )
         return hidden_states
 
@@ -722,6 +907,7 @@ class SD3VAEEncoder(torch.nn.Module):
 
         for i in range(0, sample.shape[2], batch_size):
 <<<<<<< HEAD
+<<<<<<< HEAD
             j = min(i + batch_size, sample.shape[2])
             sample_batch = rearrange(sample[:, :, i:j], "B C T H W -> (B T) C H W")
 =======
@@ -729,6 +915,10 @@ class SD3VAEEncoder(torch.nn.Module):
             j = min(i + batch_size, sample.shape[2])
             sample_batch = rearrange(sample[:,:,i:j], "B C T H W -> (B T) C H W")
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            j = min(i + batch_size, sample.shape[2])
+            sample_batch = rearrange(sample[:, :, i:j], "B C T H W -> (B T) C H W")
+>>>>>>> 19838ac ([model] fix: format flux code)
 
             hidden_states_batch = self(sample_batch)
             hidden_states_batch = rearrange(hidden_states_batch, "(B T) C H W -> B C T H W", B=B)
@@ -743,9 +933,13 @@ class SD3VAEEncoder(torch.nn.Module):
         return SDVAEEncoderStateDictConverter()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class ResnetBlock(torch.nn.Module):
     def __init__(self, in_channels, out_channels, temb_channels=None, groups=32, eps=1e-5):
         super().__init__()
@@ -759,12 +953,18 @@ class ResnetBlock(torch.nn.Module):
         self.conv_shortcut = None
         if in_channels != out_channels:
 <<<<<<< HEAD
+<<<<<<< HEAD
             self.conv_shortcut = torch.nn.Conv2d(
                 in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=True
             )
 =======
             self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=True)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+            self.conv_shortcut = torch.nn.Conv2d(
+                in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=True
+            )
+>>>>>>> 19838ac ([model] fix: format flux code)
 
     def forward(self, hidden_states, time_emb, text_emb, res_stack, **kwargs):
         x = hidden_states
@@ -784,9 +984,13 @@ class ResnetBlock(torch.nn.Module):
         return hidden_states, time_emb, text_emb, res_stack
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class DownSampler(torch.nn.Module):
     def __init__(self, channels, padding=1, extra_padding=False):
         super().__init__()
@@ -800,6 +1004,7 @@ class DownSampler(torch.nn.Module):
         return hidden_states, time_emb, text_emb, res_stack
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 class VAEAttentionBlock(torch.nn.Module):
     def __init__(
@@ -810,18 +1015,29 @@ class VAEAttentionBlock(torch.nn.Module):
 
     def __init__(self, num_attention_heads, attention_head_dim, in_channels, num_layers=1, norm_num_groups=32, eps=1e-5):
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+class VAEAttentionBlock(torch.nn.Module):
+    def __init__(
+        self, num_attention_heads, attention_head_dim, in_channels, num_layers=1, norm_num_groups=32, eps=1e-5
+    ):
+>>>>>>> 19838ac ([model] fix: format flux code)
         super().__init__()
         inner_dim = num_attention_heads * attention_head_dim
 
         self.norm = torch.nn.GroupNorm(num_groups=norm_num_groups, num_channels=in_channels, eps=eps, affine=True)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
         self.transformer_blocks = torch.nn.ModuleList(
             [
                 Attention(inner_dim, num_attention_heads, attention_head_dim, bias_q=True, bias_kv=True, bias_out=True)
                 for d in range(num_layers)
             ]
         )
+<<<<<<< HEAD
 =======
         self.transformer_blocks = torch.nn.ModuleList([
             Attention(
@@ -835,6 +1051,8 @@ class VAEAttentionBlock(torch.nn.Module):
             for d in range(num_layers)
         ])
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
 
     def forward(self, hidden_states, time_emb, text_emb, res_stack):
         batch, _, height, width = hidden_states.shape
@@ -853,9 +1071,13 @@ class VAEAttentionBlock(torch.nn.Module):
         return hidden_states, time_emb, text_emb, res_stack
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class FluxVAEEncoder(SD3VAEEncoder):
     def __init__(self):
         super().__init__()
@@ -867,9 +1089,13 @@ class FluxVAEEncoder(SD3VAEEncoder):
         return FluxVAEEncoderStateDictConverter()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class SDVAEEncoderStateDictConverter:
     def __init__(self):
         pass
@@ -878,6 +1104,9 @@ class SDVAEEncoderStateDictConverter:
         # architecture
         block_types = [
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
             "ResnetBlock",
             "ResnetBlock",
             "DownSampler",
@@ -892,6 +1121,7 @@ class SDVAEEncoderStateDictConverter:
             "ResnetBlock",
             "VAEAttentionBlock",
             "ResnetBlock",
+<<<<<<< HEAD
 =======
             'ResnetBlock', 'ResnetBlock', 'DownSampler',
             'ResnetBlock', 'ResnetBlock', 'DownSampler',
@@ -899,6 +1129,8 @@ class SDVAEEncoderStateDictConverter:
             'ResnetBlock', 'ResnetBlock',
             'ResnetBlock', 'VAEAttentionBlock', 'ResnetBlock'
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
         ]
 
         # Rename each parameter
@@ -924,6 +1156,7 @@ class SDVAEEncoderStateDictConverter:
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         name_list = sorted(state_dict)
 =======
         name_list = sorted([name for name in state_dict])
@@ -934,6 +1167,9 @@ class SDVAEEncoderStateDictConverter:
 =======
         name_list = sorted([name for name in state_dict])
 >>>>>>> 3bf0003 ([model] fix: format flux code)
+=======
+        name_list = sorted(state_dict)
+>>>>>>> 19838ac ([model] fix: format flux code)
         rename_dict = {}
         block_id = {"ResnetBlock": -1, "DownSampler": -1, "UpSampler": -1}
         last_block_type_with_id = {"ResnetBlock": "", "DownSampler": "", "UpSampler": ""}
@@ -944,12 +1180,18 @@ class SDVAEEncoderStateDictConverter:
                 rename_dict[name] = local_rename_dict[name_prefix] + "." + names[-1]
             elif name.startswith("encoder.down_blocks"):
 <<<<<<< HEAD
+<<<<<<< HEAD
                 block_type = {"resnets": "ResnetBlock", "downsamplers": "DownSampler", "upsamplers": "UpSampler"}[
                     names[3]
                 ]
 =======
                 block_type = {"resnets": "ResnetBlock", "downsamplers": "DownSampler", "upsamplers": "UpSampler"}[names[3]]
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+                block_type = {"resnets": "ResnetBlock", "downsamplers": "DownSampler", "upsamplers": "UpSampler"}[
+                    names[3]
+                ]
+>>>>>>> 19838ac ([model] fix: format flux code)
                 block_type_with_id = ".".join(names[:5])
                 if block_type_with_id != last_block_type_with_id[block_type]:
                     block_id[block_type] += 1
@@ -1088,9 +1330,13 @@ class SDVAEEncoderStateDictConverter:
         return state_dict_
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 class FluxVAEEncoderStateDictConverter(SDVAEEncoderStateDictConverter):
     def __init__(self):
         pass
@@ -1216,12 +1462,15 @@ class FluxVAEEncoderStateDictConverter(SDVAEEncoderStateDictConverter):
 <<<<<<< HEAD
 
 
+<<<<<<< HEAD
 =======
     
 >>>>>>> 858efdb ([model] feat: add flux)
 =======
 
 >>>>>>> 48040b0 ([model] fix: format flux code)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
 class FluxDiTStateDictConverter:
     def __init__(self):
         pass
@@ -1275,10 +1524,14 @@ class FluxDiTStateDictConverter:
             if name.endswith(".weight") or name.endswith(".bias"):
                 suffix = ".weight" if name.endswith(".weight") else ".bias"
 <<<<<<< HEAD
+<<<<<<< HEAD
                 prefix = name[: -len(suffix)]
 =======
                 prefix = name[:-len(suffix)]
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+                prefix = name[: -len(suffix)]
+>>>>>>> 19838ac ([model] fix: format flux code)
                 if prefix in global_rename_dict:
                     state_dict_[global_rename_dict[prefix] + suffix] = param
                 elif prefix.startswith("transformer_blocks."):
@@ -1303,6 +1556,7 @@ class FluxDiTStateDictConverter:
             if "single_blocks." in name and ".a_to_q." in name:
                 mlp = state_dict_.get(name.replace(".a_to_q.", ".proj_in_besides_attn."), None)
                 if mlp is None:
+<<<<<<< HEAD
 <<<<<<< HEAD
                     mlp = torch.zeros(
                         4 * state_dict_[name].shape[0], *state_dict_[name].shape[1:], dtype=state_dict_[name].dtype
@@ -1331,6 +1585,22 @@ class FluxDiTStateDictConverter:
                     mlp,
                 ], dim=0)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+                    mlp = torch.zeros(
+                        4 * state_dict_[name].shape[0], *state_dict_[name].shape[1:], dtype=state_dict_[name].dtype
+                    )
+                else:
+                    state_dict_.pop(name.replace(".a_to_q.", ".proj_in_besides_attn."))
+                param = torch.concat(
+                    [
+                        state_dict_.pop(name),
+                        state_dict_.pop(name.replace(".a_to_q.", ".a_to_k.")),
+                        state_dict_.pop(name.replace(".a_to_q.", ".a_to_v.")),
+                        mlp,
+                    ],
+                    dim=0,
+                )
+>>>>>>> 19838ac ([model] fix: format flux code)
                 name_ = name.replace(".a_to_q.", ".to_qkv_mlp.")
                 state_dict_[name_] = param
         for name in list(state_dict_.keys()):
@@ -1338,6 +1608,9 @@ class FluxDiTStateDictConverter:
                 if f".{component}_to_q." in name:
                     name_ = name.replace(f".{component}_to_q.", f".{component}_to_qkv.")
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
                     param = torch.concat(
                         [
                             state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_q.")],
@@ -1346,6 +1619,7 @@ class FluxDiTStateDictConverter:
                         ],
                         dim=0,
                     )
+<<<<<<< HEAD
 =======
                     param = torch.concat([
                         state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_q.")],
@@ -1353,6 +1627,8 @@ class FluxDiTStateDictConverter:
                         state_dict_[name.replace(f".{component}_to_q.", f".{component}_to_v.")],
                     ], dim=0)
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
                     state_dict_[name_] = param
                     state_dict_.pop(name.replace(f".{component}_to_q.", f".{component}_to_q."))
                     state_dict_.pop(name.replace(f".{component}_to_q.", f".{component}_to_k."))
@@ -1408,9 +1684,12 @@ class FluxDiTStateDictConverter:
             "txt_mod.lin.bias": "norm1_b.linear.bias",
             "txt_mod.lin.weight": "norm1_b.linear.weight",
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+>>>>>>> 19838ac ([model] fix: format flux code)
             "linear1.bias": "to_qkv_mlp.bias",
             "linear1.weight": "to_qkv_mlp.weight",
             "linear2.bias": "proj_out.bias",
@@ -1424,10 +1703,14 @@ class FluxDiTStateDictConverter:
         for name, param in state_dict.items():
             if name.startswith("model.diffusion_model."):
 <<<<<<< HEAD
+<<<<<<< HEAD
                 name = name[len("model.diffusion_model.") :]
 =======
                 name = name[len("model.diffusion_model."):]
 >>>>>>> 858efdb ([model] feat: add flux)
+=======
+                name = name[len("model.diffusion_model.") :]
+>>>>>>> 19838ac ([model] fix: format flux code)
             names = name.split(".")
             if name in rename_dict:
                 rename = rename_dict[name]

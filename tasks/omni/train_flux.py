@@ -1,7 +1,7 @@
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 import torch
 import torch.distributed as dist
@@ -109,6 +109,7 @@ class MyModelArguments(ModelArguments):
 =======
 >>>>>>> dac3796 ([model] fix: move lora to flux_train)
 
+
 @dataclass
 class MyTrainingArguments(TrainingArguments):
     save_initial_model: bool = field(
@@ -131,6 +132,7 @@ class MyTrainingArguments(TrainingArguments):
 
 =======
 >>>>>>> dac3796 ([model] fix: move lora to flux_train)
+
 
 @dataclass
 class Arguments:
@@ -559,9 +561,13 @@ def main():
     dist.destroy_process_group()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 =======
 >>>>>>> 48040b0 ([model] fix: format flux code)
+=======
+
+>>>>>>> 19838ac ([model] fix: format flux code)
 def save_hf_weights(args, save_checkpoint_path, model_assets):
     hf_weights_path = os.path.join(save_checkpoint_path, "hf_ckpt")
     model_state_dict = ckpt_to_state_dict(

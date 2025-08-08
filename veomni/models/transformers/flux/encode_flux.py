@@ -18,6 +18,7 @@ import os
 import torch
 from safetensors import safe_open
 
+
 refiners = []
 
 
@@ -27,6 +28,7 @@ def encode_prompt_using_clip(prompt, text_encoder, tokenizer, max_length, device
     ).input_ids.to(device)
     pooled_prompt_emb, _ = text_encoder(input_ids)
     return pooled_prompt_emb
+
 
 def encode_prompt_using_t5(prompt, text_encoder, tokenizer, max_length, device):
     input_ids = tokenizer(
@@ -39,6 +41,7 @@ def encode_prompt_using_t5(prompt, text_encoder, tokenizer, max_length, device):
     prompt_emb = text_encoder(input_ids)
     return prompt_emb
 
+
 @torch.no_grad()
 def process_prompt(prompt, positive=True):
     if isinstance(prompt, list):
@@ -47,6 +50,7 @@ def process_prompt(prompt, positive=True):
         for refiner in refiners:
             prompt = refiner(prompt, positive=positive)
     return prompt
+
 
 def encode_prompt(
     prompt,
@@ -107,6 +111,7 @@ def load_state_dict_from_safetensors(file_path, torch_dtype=None, device="cpu"):
                 state_dict[k] = state_dict[k].to(torch_dtype)
     return state_dict
 
+
 def load_state_dict_from_bin(file_path, torch_dtype=None, device="cpu"):
     state_dict = torch.load(file_path, map_location=device, weights_only=True)
     if torch_dtype is not None:
@@ -114,6 +119,7 @@ def load_state_dict_from_bin(file_path, torch_dtype=None, device="cpu"):
             if isinstance(state_dict[i], torch.Tensor):
                 state_dict[i] = state_dict[i].to(torch_dtype)
     return state_dict
+
 
 def load_state_dict_(file_path, torch_dtype=None, device="cpu"):
     if file_path.endswith(".safetensors"):
@@ -138,6 +144,7 @@ def load_model(file_path, device=None, torch_dtype=None):
         state_dict = None
 
     return state_dict
+
 
 def from_diffusers(state_dict):
     rename_dict = {
@@ -171,6 +178,7 @@ def from_diffusers(state_dict):
             state_dict_[name_] = param
     return state_dict_
 
+
 def load_model_from_huggingface_folder(file_path, model_classes, torch_dtype, device):
     if torch_dtype in [torch.float32, torch.float16, torch.bfloat16]:
         model = model_classes.from_pretrained(file_path, torch_dtype=torch_dtype).eval()
@@ -179,6 +187,7 @@ def load_model_from_huggingface_folder(file_path, model_classes, torch_dtype, de
     if torch_dtype == torch.float16 and hasattr(model, "half"):
         model = model.half()
     return model
+
 
 def load_model_from_single_file(state_dict, model_class, model_resource, torch_dtype, device):
     state_dict_converter = model_class.state_dict_converter()
