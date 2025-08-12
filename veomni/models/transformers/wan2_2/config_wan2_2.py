@@ -30,7 +30,7 @@ except ModuleNotFoundError:
 
 class WanConfig2_2(PretrainedConfig):
     model_type = "wan2_2"
-    
+
     def __init__(
         self,
         patch_size=[1, 2, 2],
