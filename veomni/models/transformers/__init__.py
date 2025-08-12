@@ -14,7 +14,7 @@
 
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-from ...ops.attention import flash_attention_forward, flash_attention_3_forward
+from ...ops.attention import flash_attention_3_forward, flash_attention_forward
 
 
 ALL_ATTENTION_FUNCTIONS.register("flash_attention_2", flash_attention_forward)

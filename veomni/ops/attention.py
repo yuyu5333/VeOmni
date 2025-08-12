@@ -132,6 +132,7 @@ def flash_attention_forward(
 
     return attn_output, None
 
+
 def flash_attention_3_forward():
     # TODO: add flash attention 3
     pass
