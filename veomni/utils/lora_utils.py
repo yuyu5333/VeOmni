@@ -48,9 +48,7 @@ def add_lora_to_model(
 
     for lora_target_module in lora_config.target_modules:
         if lora_target_module not in lora_target_modules_support:
-            raise ValueError(
-                f"lora_target_module {lora_target_module} not in lora_target_modules_support"
-            )
+            raise ValueError(f"lora_target_module {lora_target_module} not in lora_target_modules_support")
 
     model = inject_adapter_in_model(lora_config, model)
     for param in model.parameters():

@@ -17,15 +17,9 @@ from transformers import PretrainedConfig
 
 
 class FluxConfig(PretrainedConfig):
-    model_type = "flux"  # 必须与注册时的 model_type 一致
+    model_type = "flux"
 
-    def __init__(
-        self,
-        disable_guidance_embedder=False,
-        input_dim=64,
-        num_blocks=19,
-        **kwargs
-    ):
+    def __init__(self, disable_guidance_embedder=False, input_dim=64, num_blocks=19, **kwargs):
         self.disable_guidance_embedder = disable_guidance_embedder
         self.input_dim = input_dim
         self.num_blocks = num_blocks

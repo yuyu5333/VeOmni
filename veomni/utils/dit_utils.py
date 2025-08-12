@@ -70,9 +70,8 @@ def _compute_wan_seqlens(
     seqlens = B * T_out * H_out * W_out
     return [seqlens]
 
-def _compute_flux_seqlens(
-    micro_batch: Dict[str, "torch.Tensor"]
-) -> Tuple[List[int], Optional[List[int]]]:
+
+def _compute_flux_seqlens(micro_batch: Dict[str, "torch.Tensor"]) -> Tuple[List[int], Optional[List[int]]]:
     """
     Computes the sequence lengths of the current batch.
 
@@ -84,6 +83,7 @@ def _compute_flux_seqlens(
     W_out = int((W - 2) / 2 + 1)
     seqlens = B * H_out * W_out
     return [seqlens]
+
 
 class EnvironMeter(OriginalEnvironMeter):
     """
@@ -107,7 +107,7 @@ class EnvironMeter(OriginalEnvironMeter):
         if model_type == "wan":
             seqlens = _compute_wan_seqlens(micro_batch, self.rmpad, self.rmpad_with_pos_ids)
         elif model_type == "flux":
-            seqlens =  _compute_flux_seqlens(micro_batch)
+            seqlens = _compute_flux_seqlens(micro_batch)
         else:
             raise ValueError(f"model_type {model_type} not supported")
 
