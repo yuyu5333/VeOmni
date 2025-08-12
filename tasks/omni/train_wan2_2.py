@@ -34,7 +34,6 @@ from veomni.utils.dit_utils import EnvironMeter, save_model_weights
 from veomni.utils.lora_utils import add_lora_to_model, freeze_parameters
 from veomni.utils.recompute_utils import convert_ops_to_objects
 
-from veomni.models.transformers import wan2_2
 
 logger = helper.create_logger(__name__)
 
@@ -325,13 +324,19 @@ def main():
 
             for micro_batch in micro_batches:
                 environ_meter.add(micro_batch, model_type="wan")
-                
+
                 # 如果不存在就是1
-                max_timestep_boundary = int((args.train.max_timestep_boundary if args.train.max_timestep_boundary is not None else 1) * flow_scheduler.num_train_timesteps)
-                min_timestep_boundary = int((args.train.min_timestep_boundary if args.train.min_timestep_boundary is not None else 0) * flow_scheduler.num_train_timesteps)
+                max_timestep_boundary = int(
+                    (args.train.max_timestep_boundary if args.train.max_timestep_boundary is not None else 1)
+                    * flow_scheduler.num_train_timesteps
+                )
+                min_timestep_boundary = int(
+                    (args.train.min_timestep_boundary if args.train.min_timestep_boundary is not None else 0)
+                    * flow_scheduler.num_train_timesteps
+                )
                 latents = micro_batch["latents"].to(model.device)
                 prompt_emb = micro_batch["prompt_emb"]
-                
+
                 if args.train.micro_batch_size > 1:
                     prompt_emb["context"] = prompt_emb["context"].squeeze(1).to(model.device)
                     image_emb = micro_batch["image_emb"]
