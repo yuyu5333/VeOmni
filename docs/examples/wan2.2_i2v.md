@@ -44,7 +44,7 @@ bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_sft.yaml --model.mod
 
 You can configure training parameters by modifying configs/dit/wan2_2_sft.yaml.
 
-TODO: 
+TODO:
 
 - LoRa
 
