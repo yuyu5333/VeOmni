@@ -1,7 +1,7 @@
 model:
   model_path: Wan2.2-I2V-A14B/high_noise_model
   config_path: ./configs/model_configs/wan/wan2_2_i2v_a14b.json
-  attn_implementation: flash_attention_3
+  attn_implementation: flash_attention_2
 
 data:
   train_path: dataset/Wanmini480
@@ -49,12 +49,8 @@ train:
   use_wandb: false
   wandb_project: Wan2.2-I2V-14B-480P
   wandb_name: sft_wan2.2_i2v_14b
-  # High noise model:
   max_timestep_boundary: 1.0
   min_timestep_boundary: 0.875
-  # Low noise model:
-  ## max_timestep_boundary: 0.875
-  ## min_timestep_boundary: 0.0
   ops_to_save:
     - aten.addmm.default
     - torch.ops.flash_attn._flash_attn_forward.default
