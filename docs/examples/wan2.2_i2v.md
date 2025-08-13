@@ -27,17 +27,25 @@ video01.tensors.pth,"an aerial view of a large, ancient stone structure surround
 video02.tensors.pth,"a view of a river flowing through a forested area. the water appears calm and reflects the blue of the sky ..."
 ```
 
-3. Train flux model
+3. Train wan2.2 i2v model
 
 SFT:
+
+high_noise:
 ```
-bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_sft.yaml
+bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_sft.yaml --model.model_path Wan-AI/Wan2.2-I2V-A14B/high_noise_model --train.max_timestep_boundary 1.0 --train.min_timestep_boundary 0.875
 ```
+
+low_noise:
+```
+bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_sft.yaml --model.model_path Wan-AI/Wan2.2-I2V-A14B/low_noise_model --train.max_timestep_boundary 0.875 --train.min_timestep_boundary 0.0
+```
+
 
 You can configure training parameters by modifying configs/dit/wan2_2_sft.yaml.
 
 TODO: 
 
-LoRa
+- LoRa
 
-DataProcess
+- DataProcess
