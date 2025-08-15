@@ -31,21 +31,27 @@ video02.tensors.pth,"a view of a river flowing through a forested area. the wate
 
 SFT:
 
-high_noise:
+- high_noise:
 ```
 bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_sft.yaml --model.model_path Wan-AI/Wan2.2-I2V-A14B/high_noise_model --train.max_timestep_boundary 1.0 --train.min_timestep_boundary 0.875
 ```
 
-low_noise:
+- low_noise:
 ```
 bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_sft.yaml --model.model_path Wan-AI/Wan2.2-I2V-A14B/low_noise_model --train.max_timestep_boundary 0.875 --train.min_timestep_boundary 0.0
 ```
 
+LoRa:
 
-You can configure training parameters by modifying configs/dit/wan2_2_sft.yaml.
+- high_noise:
+```
+bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_lora.yaml --model.model_path Wan-AI/Wan2.2-I2V-A14B/high_noise_model --train.max_timestep_boundary 1.0 --train.min_timestep_boundary 0.875
+```
 
-TODO:
+- low_noise:
+```
+bash train.sh tasks/omni/train_wan2_2.py configs/dit/wan2_2_lora.yaml --model.model_path Wan-AI/Wan2.2-I2V-A14B/low_noise_model --train.max_timestep_boundary 0.875 --train.min_timestep_boundary 0.0
+```
 
-- LoRa
 
-- DataProcess
+You can configure training parameters by modifying configs/dit/wan2_2_sft.yaml and configs/dit/wan2_2_lora.yaml.
