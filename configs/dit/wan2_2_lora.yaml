@@ -3,6 +3,7 @@ model:
   config_path: ./configs/model_configs/wan/wan2_2_i2v_a14b.json
   attn_implementation: flash_attention_2
   lora_target_modules: q,k,v,o,ffn.0,ffn.2
+  lora_target_modules_support: q,k,v,o,ffn.0,ffn.2
   lora_rank: 32
   lora_alpha: 32
 
