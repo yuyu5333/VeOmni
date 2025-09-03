@@ -1,8 +1,8 @@
 model:
-  model_path: /file_system/wyz/data/Qwen2.5-VL-7B-Instruct
+  model_path: data/Qwen2.5-VL-7B-Instruct
 
 data:
-  train_path: /file_system/wyz/dataset/ShareGPT4V/veomni_process/sharegpt4v_captioner_customer
+  train_path: ShareGPT4V/veomni_process/sharegpt4v_captioner_customer
   chat_template: qwen2_5vl
   max_seq_len: 2048
   train_size: 80000000
